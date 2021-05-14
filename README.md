@@ -1,2 +1,3 @@
 # info-nas
-NAS performance predictor that uses input/output data from networks as the dataset.
+NAS performance predictor that uses input/output data
+from networks as the dataset (alongside network architectures).
