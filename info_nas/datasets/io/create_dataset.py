@@ -1,15 +1,18 @@
+from nasbench_pytorch.trainer import train, test
+from nasbench_pytorch.datasets.cifar10 import prepare_dataset
+
 
 def create_dataset(dataset, networks):
-    # TODO tady zkusit nějak dataset (jupyter?)
 
-    # TODO krokovat DARTS a nasbench, zjistit, jak to funguje
-    #  - ten nasbench navíc upravit v tý libce
-    #      - ten to actually má per cell, ale má to nanahňaný v self.layers
-    #      - taky jsou tam nějaký vertex channels či co
+    # TODO train valid test tady (ať je jen jednou)
 
-    # zdá se, že tohle můžu mít celkem zvlášť v repu, jen to musím upravit, aby to bylo standalone lib a ne přes ty
-    # run skripty
-
-    # Tak možná začít psát vedle fce (třeba tuhle) a vždycky přes jup ntb a debugging tohohle a drop paper zjistit,
-    # co vlastně potřebuju
+    # vymyslet kam dat ty predtrenovany
     pass
+
+
+def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None):
+
+    train(net, train_loader, valid_loader)
+    test(net, test_loader, num_tests=num_tests)
+
+    # TODO ještě ať to vrací train a test loss apod (kuk nasbench, co je přesně train loss? last epoch?)
