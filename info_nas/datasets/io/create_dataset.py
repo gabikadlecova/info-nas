@@ -1,18 +1,14 @@
-from nasbench_pytorch.trainer import train, test
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
+
+# TODO tohle vypada, ze je zbytecnej directory, ale mohlo by bejt i vic ruznejch dataset typu
+
+# TODO dataset bude train-valid-test, nas zajima valid asi? train?
+# TODO jako dalsi split networku na labeled-unlabeled
 
 
 def create_dataset(dataset, networks):
 
     # TODO train valid test tady (ať je jen jednou)
 
-    # vymyslet kam dat ty predtrenovany
     pass
 
-
-def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None):
-
-    train(net, train_loader, valid_loader)
-    test(net, test_loader, num_tests=num_tests)
-
-    # TODO ještě ať to vrací train a test loss apod (kuk nasbench, co je přesně train loss? last epoch?)
