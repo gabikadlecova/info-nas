@@ -5,9 +5,11 @@ from nasbench_pytorch.trainer import train, test
 # TODO nacitani
 
 
-def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None):
+def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None, num_epochs=108):
 
-    loss, acc, val_loss, val_acc = train(net, train_loader, valid_loader)  # TODO will be changed if more metrics needed
+    # TODO will be changed if more metrics needed
+    loss, acc, val_loss, val_acc = train(net, train_loader, validation_loader=valid_loader, num_epochs=num_epochs)
+
     test_loss, test_acc = test(net, test_loader, num_tests=num_tests)
 
     metrics = {

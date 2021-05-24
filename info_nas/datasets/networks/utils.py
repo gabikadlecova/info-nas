@@ -23,16 +23,16 @@ def load_nasbench(nasbench_path, include_metrics=False):
     return data
 
 
-def save_trained_net(net_hash, net, dir_path='./checkpoints/', net_args=None, net_kwargs=None):
+def save_trained_net(net_hash, net, dir_path='./checkpoints/', info=None, net_args=None, net_kwargs=None):
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
 
-    #TODO staci pres net_hash umet nacist
     checkpoint_dict = {
         'hash': net_hash,
         'model_state_dict': net.state_dict(),
         'args': net_args,
-        'kwargs': net_kwargs
+        'kwargs': net_kwargs,
+        'info': info
     }
 
     torch.save(checkpoint_dict, os.path.join(dir_path, f'{net_hash}.tar'))
@@ -49,7 +49,7 @@ def load_trained_net(net_path, nasbench):
     net = NBNetwork((ops, adjacency), *checkpoint['args'], **checkpoint['kwargs'])
     net.load_state_dict(checkpoint['model_state_dict'])
 
-    return net
+    return net, checkpoint['info']
 
 
 
