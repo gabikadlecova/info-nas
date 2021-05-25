@@ -46,7 +46,10 @@ def load_trained_net(net_path, nasbench):
     ops = net_m[0]['module_operations']
     adjacency = net_m[0]['module_adjacency']
 
-    net = NBNetwork((ops, adjacency), *checkpoint['args'], **checkpoint['kwargs'])
+    args = checkpoint['args'] if checkpoint['args'] is not None else []
+    kwargs = checkpoint['kwargs'] if checkpoint['kwargs'] is not None else {}
+
+    net = NBNetwork((adjacency, ops), *args, **kwargs)
     net.load_state_dict(checkpoint['model_state_dict'])
 
     return net, checkpoint['info']
