@@ -38,8 +38,8 @@ def save_trained_net(net_hash, net, dir_path='./checkpoints/', info=None, net_ar
     torch.save(checkpoint_dict, os.path.join(dir_path, f'{net_hash}.tar'))
 
 
-def load_trained_net(net_path, nasbench):
-    checkpoint = torch.load(net_path)
+def load_trained_net(net_path, nasbench, device=None):
+    checkpoint = torch.load(net_path, map_location=device)
 
     net_m = nasbench.get_metrics_from_hash(checkpoint['hash'])
 
@@ -53,9 +53,6 @@ def load_trained_net(net_path, nasbench):
     net.load_state_dict(checkpoint['model_state_dict'])
 
     return net, checkpoint['info']
-
-
-
 
 
 # TODO a pak fci, co to predtrenuje. to v create dataset uz nacte natrenovany
