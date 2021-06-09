@@ -4,6 +4,15 @@ from nasbench import api
 from nasbench_pytorch.model import Network as NBNetwork
 
 
+def get_net_from_hash(hash, nasbench):
+    m = nasbench.get_metrics_from_hash(hash)
+
+    ops = m[0]['module_operations']
+    adjacency = m[0]['module_adjacency']
+
+    return ops, adjacency
+
+
 def load_nasbench(nasbench_path, include_metrics=False):
     if include_metrics:
         raise NotImplementedError("Metrics are not supported yet.")
@@ -13,11 +22,7 @@ def load_nasbench(nasbench_path, include_metrics=False):
     data = []
 
     for _, h in enumerate(nasbench.hash_iterator()):
-        m = nasbench.get_metrics_from_hash(h)
-
-        ops = m[0]['module_operations']
-        adjacency = m[0]['module_adjacency']
-
+        ops, adjacency = get_net_from_hash(h, nasbench)
         data.append((h, ops, adjacency))
 
     return data
@@ -53,6 +58,3 @@ def load_trained_net(net_path, nasbench, device=None):
     net.load_state_dict(checkpoint['model_state_dict'])
 
     return checkpoint['hash'], net, checkpoint['info']
-
-
-# TODO a pak fci, co to predtrenuje.
