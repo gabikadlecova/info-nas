@@ -1,8 +1,13 @@
 from nasbench_pytorch.trainer import train, test
 
 
-# TODO tady bude taky nejaky get_nth_output
-# TODO nacitani
+# TODO nacitani natrenovanejch z directory
+
+
+def pretrain_network_dataset(nets):
+    # TODO vybrat nahodny site do poctu
+    #  pak veci z jupyteru
+    pass
 
 
 def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None, num_epochs=108, device=None):

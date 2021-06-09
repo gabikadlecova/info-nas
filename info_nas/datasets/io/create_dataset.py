@@ -1,4 +1,5 @@
 import numpy as np
+import os
 import torch
 from torch import nn
 
@@ -7,25 +8,73 @@ from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 from nasbench_pytorch.model import Network as NBNetwork
 
 
-# TODO dataset bude train-valid-test, nas zajima valid asi? train?
-# TODO jako dalsi split networku na labeled-unlabeled
+# TODO use valid set? train set?
+
+# TODO adjacency apod dostat z arch2vecu, tam už je veškerej prepro (imputace apod)
+#   - na to nějakou fci v utils
+#   - teda kromě prepro co se dělá v train loopu
+
+# TODO bacha ať nets nejsou ve valid setu arch2vecu
+#   - pretrain jen z hashů z train setu
+from info_nas.datasets.networks.utils import load_trained_net
 
 
-def create_dataset(networks: List[NBNetwork], nth_output, batch_size=32, valid_size=1000, random_state=42, loss=None,
-                   device=None, **kwargs):
+def load_io_dataset(dataset_path: str, device=None):
+    data = torch.load(dataset_path, map_location=device)
+    return data['net_hashes'], data['inputs'], data['outputs']
+
+
+def dataset_from_pretrained(net_dir: str, nasbench, save_path: str, nth_output, batch_size=32, valid_size=1000,
+                            random_state=42, loss=None, device=None, **kwargs):
+
+    # pretrained networks in a folder
+    net_paths = os.listdir(net_dir)
+    networks = [load_trained_net(net_path, nasbench, device=device) for net_path in net_paths]
+
+    dataset = create_io_dataset(networks, nth_output, batch_size=batch_size, valid_size=valid_size,
+                                random_state=random_state, loss=loss, device=device, **kwargs)
+
+    hashes, inputs, outputs = dataset
+    hashes = torch.tensor(hashes)
+
+    torch.save({'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}, save_path)
+
+
+def create_io_dataset(networks: List[(str, NBNetwork)], nth_output, batch_size=32, valid_size=1000, random_state=42,
+                      loss=None, device=None, **kwargs):
 
     datasets = prepare_dataset(batch_size, validation_size=valid_size, random_state=random_state, **kwargs)
     _, _, valid_loader, validation_size, _, _ = datasets
 
-    for network in networks:
+    net_hashes = []
+    in_list = []
+    out_list = []
+
+    # get the io info per network
+    for net_hash, network in networks:
         net_res = _get_net_outputs(network, valid_loader, nth_output, loss=loss, num_data=validation_size,
                                    device=device)
-        # TODO dodělat
+        in_data, out_data = net_res["in_data"], net_res["out_data"]
+        assert in_data.shape[0] == out_data.shape[0]
 
-    # TODO tady vzít předtrénovaný, dataset je valid set cifar, udělat outputy (a vrátit inputy). Shuffle.
-    pass
+        for _ in range(in_data.shape[0]):
+            net_hashes.append(net_hash)
 
-# todo fce pretrain, teď je to všechno v jupyteru.
+        in_list.append(in_data)
+        out_list.append(out_data)
+
+    # form a shuffled dataset
+    net_hashes = np.array(net_hashes)
+    in_list = torch.cat(in_list)
+    out_list = torch.cat(out_list)
+
+    assert len(net_hashes) == len(in_list) and len(net_hashes) == len(out_list)
+
+    indices = np.arange(len(net_hashes))
+    state = np.random.RandomState(seed=random_state) if random_state is not None else np.random
+    state.shuffle(indices)
+
+    return net_hashes[indices], in_list[indices], out_list[indices]
 
 
 def _get_net_outputs(net: NBNetwork, data_loader, nth_output, loss=None, num_data=None, device=None):
@@ -72,8 +121,8 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_output, loss=None, num_dat
     acc = correct / num_data
 
     return {
-        'in_data': torch.stack(in_data),
-        'out_data': torch.stack(out_data),
+        'in_data': torch.cat(in_data),
+        'out_data': torch.cat(out_data),
 
         'loss': last_loss,
         'accuracy': acc

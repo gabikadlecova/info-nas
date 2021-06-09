@@ -52,8 +52,7 @@ def load_trained_net(net_path, nasbench, device=None):
     net = NBNetwork((adjacency, ops), *args, **kwargs)
     net.load_state_dict(checkpoint['model_state_dict'])
 
-    return net, checkpoint['info']
+    return checkpoint['hash'], net, checkpoint['info']
 
 
-# TODO a pak fci, co to predtrenuje. to v create dataset uz nacte natrenovany
-#  mozna nakou pomocnou tridu na to, at v tom neny bordel (kde bude x, matice, natrenovana sit)
+# TODO a pak fci, co to predtrenuje.
