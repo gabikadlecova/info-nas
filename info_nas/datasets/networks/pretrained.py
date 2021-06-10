@@ -2,15 +2,18 @@ from typing import List
 
 from nasbench_pytorch.model import Network as NBNetwork
 from nasbench_pytorch.trainer import train, test
-from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net
+from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net, is_net_pretrained
 
 
 def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=None, num_epochs=10, num_labels=10,
-                             dir_path='./checkpoints/'):
+                             dir_path='./checkpoints/', skip_existing=True):
 
     train_set, n_train, val_set, n_val, test_set, n_test = dataset
 
     for net_hash in net_hashes:
+        if skip_existing and is_net_pretrained(net_hash, dir_path=dir_path):
+            continue
+
         ops, adjacency = get_net_from_hash(net_hash, nasbench)
         net = NBNetwork((adjacency, ops), num_labels)
 

@@ -1,6 +1,8 @@
 import numpy as np
 import os
 
+import torch
+
 from info_nas.datasets.config import cfg
 from info_nas.datasets.io.create_dataset import load_io_dataset, dataset_from_pretrained
 from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
@@ -8,42 +10,6 @@ from arch2vec.preprocessing.gen_json import gen_json_file
 
 from info_nas.datasets.networks.pretrained import pretrain_network_dataset
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
-
-
-def _get_hashes(batched_list):
-    return [h for batch in batched_list for h in batch]
-
-
-def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, **kwargs):
-    if save_path is not None and os.path.exists(save_path):
-        dataset = save_path
-    else:
-        dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
-
-    return get_nasbench_datasets(dataset, seed=seed, **kwargs)
-
-
-def _pretrain_if_needed(pretrained_path, nasbench, dataset, reference_hashes, device=None, **kwargs):
-    if not os.path.exists(pretrained_path):
-        os.mkdir(pretrained_path)
-
-    if not len(os.listdir(pretrained_path)):
-        pretrain_network_dataset(reference_hashes, nasbench, dataset, device=device, dir_path=pretrained_path,
-                                 **kwargs)
-
-
-def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, hashes, seed=1, device=None, config=None):
-    if config is None:
-        config = cfg
-
-    if os.path.exists(labeled_path):
-        labeled = _load_labeled(labeled_path, hashes, device=device)
-    else:
-        _pretrain_if_needed(pretrained_path, nasbench, dataset, hashes, device=device, **config['pretrain'])
-        labeled = dataset_from_pretrained(pretrained_path, nasbench, dataset, labeled_path,
-                                          random_state=seed, device=device, **config['io'])
-
-    return labeled
 
 
 def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json',
@@ -73,7 +39,17 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path, valid_hashes,
                                             seed=seed, device=device, config=config)
 
-    return train_labeled, valid_labeled, nb_dataset
+    train_data = _ops_adj_from_hashes(train_labeled[0], nb_dataset["train"])
+    valid_data = _ops_adj_from_hashes(valid_labeled[0], nb_dataset["val"])
+
+    labeled_dataset = {
+        "train_io": train_labeled,
+        "train_net": train_data,
+        "valid_io": valid_labeled,
+        "valid_net": valid_data
+    }
+
+    return labeled_dataset, nb_dataset
 
 
 def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
@@ -104,3 +80,60 @@ def _load_labeled(net_dir, reference_hashes, batched=False, device=None):
     _check_hashes(hashes, reference_hashes)
 
     return hashes, inputs, outputs
+
+
+def _get_hashes(batched_list):
+    return [h for batch in batched_list for h in batch]
+
+
+def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, **kwargs):
+    if save_path is not None and os.path.exists(save_path):
+        dataset = save_path
+    else:
+        dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
+
+    return get_nasbench_datasets(dataset, seed=seed, **kwargs)
+
+
+def _pretrain_if_needed(pretrained_path, nasbench, dataset, net_hashes, device=None, **kwargs):
+    if not os.path.exists(pretrained_path):
+        os.mkdir(pretrained_path)
+
+    if not len(os.listdir(pretrained_path)):
+        pretrain_network_dataset(net_hashes, nasbench, dataset, device=device, dir_path=pretrained_path,
+                                 **kwargs)
+
+
+def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, hashes, seed=1, device=None, config=None):
+    if config is None:
+        config = cfg
+
+    if os.path.exists(labeled_path):
+        labeled = _load_labeled(labeled_path, hashes, device=device)
+    else:
+        _pretrain_if_needed(pretrained_path, nasbench, dataset, hashes, device=device, **config['pretrain'])
+        labeled = dataset_from_pretrained(pretrained_path, nasbench, dataset, labeled_path,
+                                          random_state=seed, device=device, **config['io'])
+
+    return labeled
+
+
+def _ops_adj_from_hashes(net_hashes, nb_dataset):
+    net_dict = {}
+
+    # find data in batches
+    for batch in nb_dataset:
+        for item in batch:
+            if item[0] in net_hashes:
+                net_dict[item[0]] = item[1:]
+
+    # return dataset in the same order as hashes
+    ops = []
+    adj = []
+    for h in net_hashes:
+        data = net_dict[h]
+
+        adj.append(data[1])
+        ops.append(data[2])
+
+    return torch.stack(adj), torch.stack(ops)

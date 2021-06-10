@@ -28,6 +28,10 @@ def load_nasbench(nasbench_path, include_metrics=False):
     return data
 
 
+def is_net_pretrained(net_hash, dir_path='./checkpoints/'):
+    return os.path.exists(os.path.join(dir_path, f'{net_hash}.tar'))
+
+
 def save_trained_net(net_hash, net, dir_path='./checkpoints/', info=None, net_args=None, net_kwargs=None):
     if not os.path.exists(dir_path):
         os.mkdir(dir_path)
