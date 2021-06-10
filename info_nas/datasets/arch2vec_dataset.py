@@ -27,7 +27,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     nb_dataset = _generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
 
     if isinstance(dataset, str):
-        dataset = prepare_dataset(root=dataset, **config['cifar-10'])
+        dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
 
     train_hashes, valid_hashes = split_to_labeled(nb_dataset, seed=seed, percent_labeled=percent_labeled)
 
@@ -39,6 +39,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path, valid_hashes,
                                             seed=seed, device=device, config=config)
 
+    # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
     train_data = _ops_adj_from_hashes(train_labeled[0], nb_dataset["train"])
     valid_data = _ops_adj_from_hashes(valid_labeled[0], nb_dataset["val"])
 
@@ -58,8 +59,8 @@ def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
     train, valid = dataset["train"], dataset["val"]
     train_hashes, valid_hashes = _get_hashes(train[0]), _get_hashes(valid[0])
 
-    train_hashes = state.choice(train_hashes, int(percent_labeled) * len(train_hashes))
-    valid_hashes = state.choice(valid_hashes, int(percent_labeled) * len(valid_hashes))
+    train_hashes = state.choice(train_hashes, int(percent_labeled) * len(train_hashes), replace=False)
+    valid_hashes = state.choice(valid_hashes, int(percent_labeled) * len(valid_hashes), replace=False)
 
     return train_hashes, valid_hashes
 
