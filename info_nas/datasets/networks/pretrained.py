@@ -1,18 +1,13 @@
 from typing import List
 
 from nasbench_pytorch.model import Network as NBNetwork
-from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 from nasbench_pytorch.trainer import train, test
 from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net
 
 
-def pretrain_network_dataset(net_hashes: List[str], nasbench, batch_size, validation_size=1000, random_state=42,
-                             device=None, num_epochs=10, num_labels=10, dir_path='./checkpoints/', **kwargs):
-    # TODO move kwargs to a config
+def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=None, num_epochs=10, num_labels=10,
+                             dir_path='./checkpoints/'):
 
-    # get cifar-10
-    dataset = prepare_dataset(batch_size, validation_size=validation_size, random_state=random_state,
-                              **kwargs)
     train_set, n_train, val_set, n_val, test_set, n_test = dataset
 
     for net_hash in net_hashes:

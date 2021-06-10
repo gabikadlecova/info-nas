@@ -4,8 +4,8 @@ import torch
 from torch import nn
 
 from typing import List
-from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 from nasbench_pytorch.model import Network as NBNetwork
+from info_nas.datasets.networks.utils import load_trained_net
 
 
 # TODO use valid set? train set?
@@ -14,37 +14,32 @@ from nasbench_pytorch.model import Network as NBNetwork
 #   - na to nějakou fci v utils
 #   - teda kromě prepro co se dělá v train loopu
 
-# TODO bacha ať nets nejsou ve valid setu arch2vecu
-#   - pretrain jen z hashů z train setu
-from info_nas.datasets.networks.utils import load_trained_net
-
 
 def load_io_dataset(dataset_path: str, device=None):
     data = torch.load(dataset_path, map_location=device)
     return data['net_hashes'], data['inputs'], data['outputs']
 
 
-def dataset_from_pretrained(net_dir: str, nasbench, save_path: str, nth_output, batch_size=32, valid_size=1000,
-                            random_state=42, loss=None, device=None, **kwargs):
+def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, random_state=1, device=None, **kwargs):
 
     # pretrained networks in a folder
     net_paths = os.listdir(net_dir)
     networks = [load_trained_net(net_path, nasbench, device=device) for net_path in net_paths]
 
-    dataset = create_io_dataset(networks, nth_output, batch_size=batch_size, valid_size=valid_size,
-                                random_state=random_state, loss=loss, device=device, **kwargs)
+    dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
     hashes, inputs, outputs = dataset
     hashes = torch.tensor(hashes)
 
-    torch.save({'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}, save_path)
+    res = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}
+    torch.save(res, save_path)
+
+    return res
 
 
-def create_io_dataset(networks: List[(str, NBNetwork)], nth_output, batch_size=32, valid_size=1000, random_state=42,
-                      loss=None, device=None, **kwargs):
-
-    datasets = prepare_dataset(batch_size, validation_size=valid_size, random_state=random_state, **kwargs)
-    _, _, valid_loader, validation_size, _, _ = datasets
+def create_io_dataset(networks: List[(str, NBNetwork)], dataset, nth_input=0, nth_output=-2, random_state=1,
+                      loss=None, device=None):
+    _, _, valid_loader, validation_size, _, _ = dataset
 
     net_hashes = []
     in_list = []
@@ -52,7 +47,7 @@ def create_io_dataset(networks: List[(str, NBNetwork)], nth_output, batch_size=3
 
     # get the io info per network
     for net_hash, network in networks:
-        net_res = _get_net_outputs(network, valid_loader, nth_output, loss=loss, num_data=validation_size,
+        net_res = _get_net_outputs(network, valid_loader, nth_input, nth_output, loss=loss, num_data=validation_size,
                                    device=device)
         in_data, out_data = net_res["in_data"], net_res["out_data"]
         assert in_data.shape[0] == out_data.shape[0]
@@ -77,7 +72,7 @@ def create_io_dataset(networks: List[(str, NBNetwork)], nth_output, batch_size=3
     return net_hashes[indices], in_list[indices], out_list[indices]
 
 
-def _get_net_outputs(net: NBNetwork, data_loader, nth_output, loss=None, num_data=None, device=None):
+def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=None, num_data=None, device=None):
     if device is None:
         device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
         net = net.to(device)
@@ -108,7 +103,7 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_output, loss=None, num_dat
 
             in_list, out_list = net.get_cell_outputs(inputs, return_inputs=True)
 
-            in_data.append(in_list[nth_output])
+            in_data.append(in_list[nth_input])
             out_data.append(out_list[nth_output])
 
             if num_data is None:
