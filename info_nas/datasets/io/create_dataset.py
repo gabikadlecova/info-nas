@@ -29,12 +29,11 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
     dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
     hashes, inputs, outputs = dataset
-    #hashes = torch.tensor(hashes)
 
-    res = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}
-    torch.save(res, save_path)
+    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}
+    torch.save(data, save_path)
 
-    return res
+    return hashes, inputs, outputs
 
 
 def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,

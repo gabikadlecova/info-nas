@@ -135,10 +135,10 @@ def _ops_adj_from_hashes(net_hashes, nb_dataset):
     net_dict = {}
 
     # find data in batches
-    for batch in nb_dataset:
-        for item in batch:
-            if item[0] in net_hashes:
-                net_dict[item[0]] = item[1:]
+    for i_batch, batch in enumerate(nb_dataset[0]):
+        for i, item in enumerate(batch):
+            if item in net_hashes:
+                net_dict[item] = nb_dataset[1][i_batch][i], nb_dataset[2][i_batch][i]
 
     # return dataset in the same order as hashes
     ops = []
@@ -146,7 +146,7 @@ def _ops_adj_from_hashes(net_hashes, nb_dataset):
     for h in net_hashes:
         data = net_dict[h]
 
-        adj.append(data[1])
-        ops.append(data[2])
+        adj.append(data[0])
+        ops.append(data[1])
 
     return torch.stack(adj), torch.stack(ops)
