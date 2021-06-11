@@ -24,12 +24,12 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 
     # pretrained networks in a folder
     net_paths = os.listdir(net_dir)
-    networks = [load_trained_net(net_path, nasbench, device=device) for net_path in net_paths]
+    networks = [load_trained_net(os.path.join(net_dir, net_path), nasbench, device=device) for net_path in net_paths]
 
     dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
     hashes, inputs, outputs = dataset
-    hashes = torch.tensor(hashes)
+    #hashes = torch.tensor(hashes)
 
     res = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}
     torch.save(res, save_path)
@@ -46,7 +46,7 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
     out_list = []
 
     # get the io info per network
-    for net_hash, network in networks:
+    for net_hash, network, _ in networks:
         net_res = _get_net_outputs(network, valid_loader, nth_input, nth_output, loss=loss, num_data=validation_size,
                                    device=device)
         in_data, out_data = net_res["in_data"], net_res["out_data"]

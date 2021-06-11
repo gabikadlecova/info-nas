@@ -60,5 +60,6 @@ def load_trained_net(net_path, nasbench, device=None):
 
     net = NBNetwork((adjacency, ops), *args, **kwargs)
     net.load_state_dict(checkpoint['model_state_dict'])
+    net = net.to(device)
 
     return checkpoint['hash'], net, checkpoint['info']

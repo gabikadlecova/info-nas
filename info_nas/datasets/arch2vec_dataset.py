@@ -19,7 +19,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                    train_labeled_path='../data/train_labeled.pt',
                                    valid_labeled_path='../data/valid_labeled.pt',
                                    train_pretrained='../data/train_checkpoints/',
-                                   valid_pretrained='../data/valid_checkpoint/',
+                                   valid_pretrained='../data/valid_checkpoints/',
                                    device=None, config=None):
     # creates/loads both the original dataset and the labeled io dataset
 
@@ -33,10 +33,12 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
 
     train_hashes, valid_hashes = split_to_labeled(nb_dataset, seed=seed, percent_labeled=percent_labeled)
 
+    print('Processing labeled nets for the training set...')
     # networks from train set
     train_labeled = _create_or_load_labeled(nasbench, dataset, train_pretrained, train_labeled_path, train_hashes,
                                             seed=seed, device=device, config=config)
 
+    print('Processing labeled nets for the validation set...')
     # networks from valid set
     valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path, valid_hashes,
                                             seed=seed, device=device, config=config)
@@ -97,7 +99,7 @@ def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, **kwargs):
         print(f"Loading nasbench dataset (arch2vec) from {save_path}")
         dataset = save_path
     else:
-        print(f"Generating nasbench dataset (arch2vec){'.' if save_path is None else f', saving to {save_path}.'}")
+        print(f"Generating nasbench dataset (arch2vec){'.' if save_path is None else f', save path = {save_path}.'}")
         dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
 
     return get_nasbench_datasets(dataset, seed=seed, **kwargs)
