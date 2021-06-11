@@ -3,7 +3,7 @@ import os
 import torch
 from torch import nn
 
-from typing import List
+from typing import List, Tuple
 from nasbench_pytorch.model import Network as NBNetwork
 from info_nas.datasets.networks.utils import load_trained_net
 
@@ -37,7 +37,7 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
     return res
 
 
-def create_io_dataset(networks: List[(str, NBNetwork)], dataset, nth_input=0, nth_output=-2, random_state=1,
+def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,
                       loss=None, device=None):
     _, _, valid_loader, validation_size, _, _ = dataset
 

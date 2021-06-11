@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List
 
 from nasbench_pytorch.model import Network as NBNetwork
@@ -10,9 +11,14 @@ def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=No
 
     train_set, n_train, val_set, n_val, test_set, n_test = dataset
 
+    net_hashes = [n for n in net_hashes if not (skip_existing and is_net_pretrained(n, dir_path=dir_path))]
+    print(f"Pretraining {len(net_hashes)} networks.\n--------------------------------\n")
+
     for net_hash in net_hashes:
-        if skip_existing and is_net_pretrained(net_hash, dir_path=dir_path):
-            continue
+
+        print(f"Pretraining network {net_hash}.")
+        now = datetime.now()
+        print(now.strftime("%d/%m/%Y %H:%M:%S\n--------------------"))
 
         ops, adjacency = get_net_from_hash(net_hash, nasbench)
         net = NBNetwork((adjacency, ops), num_labels)

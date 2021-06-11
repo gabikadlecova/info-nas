@@ -1,3 +1,5 @@
+import math
+
 import numpy as np
 import os
 
@@ -59,10 +61,13 @@ def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
     train, valid = dataset["train"], dataset["val"]
     train_hashes, valid_hashes = _get_hashes(train[0]), _get_hashes(valid[0])
 
-    train_hashes = state.choice(train_hashes, int(percent_labeled) * len(train_hashes), replace=False)
-    valid_hashes = state.choice(valid_hashes, int(percent_labeled) * len(valid_hashes), replace=False)
+    train_hashes_chosen = state.choice(train_hashes, math.ceil(percent_labeled * len(train_hashes)), replace=False)
+    valid_hashes_chosen = state.choice(valid_hashes, math.ceil(percent_labeled * len(valid_hashes)), replace=False)
 
-    return train_hashes, valid_hashes
+    print(f"Split the dataset (percent labeled = {percent_labeled}) - "
+          f"{len(train_hashes_chosen)}/{len(train_hashes)} labeled networks chosen from the train set, "
+          f"{len(valid_hashes_chosen)}/{len(valid_hashes)} labeled networks chosen from the validation set.")
+    return train_hashes_chosen, valid_hashes_chosen
 
 
 def _check_hashes(hashes, reference):
@@ -89,8 +94,10 @@ def _get_hashes(batched_list):
 
 def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, **kwargs):
     if save_path is not None and os.path.exists(save_path):
+        print(f"Loading nasbench dataset (arch2vec) from {save_path}")
         dataset = save_path
     else:
+        print(f"Generating nasbench dataset (arch2vec){'.' if save_path is None else f', saving to {save_path}.'}")
         dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
 
     return get_nasbench_datasets(dataset, seed=seed, **kwargs)
@@ -110,9 +117,12 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, ha
         config = cfg
 
     if os.path.exists(labeled_path):
+        print(f'Loading labeled dataset from {labeled_path}.')
         labeled = _load_labeled(labeled_path, hashes, device=device)
     else:
         _pretrain_if_needed(pretrained_path, nasbench, dataset, hashes, device=device, **config['pretrain'])
+
+        print(f'Creating labeled dataset from pretrained networks (saving to {labeled_path}).')
         labeled = dataset_from_pretrained(pretrained_path, nasbench, dataset, labeled_path,
                                           random_state=seed, device=device, **config['io'])
 
