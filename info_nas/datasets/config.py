@@ -7,8 +7,7 @@ cfg = {
 
     'nb_dataset': {
         'test_size': 0.1,
-        'batch_size': 32,
-        'val_batch_size': 100
+        'val_batch_size': None
     },
 
     'pretrain': {

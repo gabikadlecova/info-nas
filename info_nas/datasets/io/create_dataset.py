@@ -8,13 +8,6 @@ from nasbench_pytorch.model import Network as NBNetwork
 from info_nas.datasets.networks.utils import load_trained_net
 
 
-# TODO use valid set? train set?
-
-# TODO adjacency apod dostat z arch2vecu, tam už je veškerej prepro (imputace apod)
-#   - na to nějakou fci v utils
-#   - teda kromě prepro co se dělá v train loopu
-
-
 def load_io_dataset(dataset_path: str, device=None):
     data = torch.load(dataset_path, map_location=device)
     return data['net_hashes'], data['inputs'], data['outputs']

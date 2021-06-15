@@ -15,32 +15,33 @@ def _initialize_arch2vec_model(model):
 
 # TODO zkusit trénovat paralelně model s io i bez io?
 
-def train(nb_dataset, nasbench, device=None, seed=1, val_size=0.1, epochs=8, batch_size=32, val_batch_size=100,
-          config=4):
+def train(unlabeled, labeled, nasbench, device=None, batch_size=32, seed=1, epochs=8, config=4):
     # nb_dataset is path to json or dict
 
     config = configs[config]
 
     model, optimizer = get_arch2vec_model(device=device)
     model = _initialize_arch2vec_model(model)
-    # TODO io dataset, io model
 
-    nb_dataset = get_nasbench_datasets(nb_dataset, seed=seed, batch_size=batch_size, val_batch_size=val_batch_size,
-                                       test_size=val_size)
+    # TODO tady prostě dát pryč indices a to samý v origo arch2vec (je to přece v extensions)
+    hash_train, X_adj_train, X_ops_train, _ = unlabeled["train"]
+    hash_val, X_adj_val, X_ops_val, _ = unlabeled["val"]
+    n_train, n_val = unlabeled["n_train"], unlabeled["n_val"]
 
-    hash_train, X_adj_train, X_ops_train, indices_train = nb_dataset["train"]
-    hash_val, X_adj_val, X_ops_val, indices_val = nb_dataset["val"]
-    n_train, n_val = nb_dataset["n_train"], nb_dataset["n_val"]
+    # TODO batch'em
 
     loss_total = []
     for epoch in range(epochs):
         model.train()
 
-        # TODO jinej dataset
         # TODO shuffle (func kwarg)
+
+        labeled_gen = enumerate()
+        # TODO střídat - možná
+
         loss_epoch = []
         Z = []
-        for i, (adj, ops, ind) in enumerate(zip(X_adj_train, X_ops_train, indices_train)):
+        for i, (adj, ops) in enumerate(zip(X_adj_train, X_ops_train)):
             optimizer.zero_grad()
             adj, ops = adj.to(device), ops.to(device)
 
@@ -79,7 +80,6 @@ def train(nb_dataset, nasbench, device=None, seed=1, val_size=0.1, epochs=8, bat
         acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val = eval_validation_accuracy(model,
                                                                                                      X_adj_val,
                                                                                                      X_ops_val,
-                                                                                                     indices_val,
                                                                                                      n_val,
                                                                                                      config=config,
                                                                                                      device=device)
