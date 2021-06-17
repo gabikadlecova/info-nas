@@ -1,5 +1,6 @@
 # TODO napsat že source je arch2vec s úpravama víceméně
 import torch
+from arch2vec.models.model import VAEReconstructed_Loss
 from torch import nn
 
 from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model, get_nasbench_datasets
@@ -35,28 +36,46 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
     for epoch in range(epochs):
         model.train()
 
-        # TODO train routine for both labeled/unlabeled (two models
-        labeled_gen = enumerate()
-
         loss_epoch = []
         Z = []
-        for i, (adj, ops) in enumerate(zip(X_adj_train, X_ops_train)):
+        for i, batch in enumerate(train_dataset):
+            if len(batch) == 2:
+                adj, ops = batch
+            elif len(batch) == 4:
+                adj, ops, inputs, outputs = batch
+                inputs, outputs = inputs.to(device), outputs.to(device)
+            else:
+                raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or 4.")
+
             optimizer.zero_grad()
-            adj, ops = adj.to(device), ops.to(device)
 
             # preprocessing
+            adj, ops = adj.to(device), ops.to(device)
             adj, ops, prep_reverse = preprocessing(adj, ops, **config['prep'])
 
             # forward
-            ops_recon, adj_recon, mu, logvar = model(ops, adj.to(torch.long))
-            Z.append(mu)
+            if len(batch) == 2:
+                # unlabeled (original model)
+                ops_recon, adj_recon, mu, logvar = model(ops, adj.to(torch.long))
+                Z.append(mu)
+
+                loss = None
+            else:
+                # labeled (extended model)
+                ops_recon, adj_recon, mu, logvar, outs_recon = model_labeled(ops, adj.to(torch.long), inputs)
+
+                # TODO Z by byly dost biased, leda mít zvlášť Z_labeled a převážit to
+                # Z.append(mu)
+
+                # TODO loss!!
+                loss = None
 
             adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
             adj, ops = prep_reverse(adj, ops)
 
-            # TODO loss
-            #loss = VAEReconstructed_Loss(**cfg['loss'])((ops_recon, adj_recon), (ops, adj), mu, logvar)
-            #loss.backward()
+            vae_loss = VAEReconstructed_Loss(**config['loss'])((ops_recon, adj_recon), (ops, adj), mu, logvar)
+            loss = vae_loss if loss is None else vae_loss + loss
+            loss.backward()
 
             nn.utils.clip_grad_norm_(model.parameters(), 5)
 
@@ -76,6 +95,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
         print('Ratio of valid decodings from the prior: {:.4f}'.format(validity))
         print('Ratio of unique decodings from the prior: {:.4f}'.format(uniqueness))
 
+        # TODO validation set, modify eval function
         acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val = eval_validation_accuracy(model,
                                                                                                      X_adj_val,
                                                                                                      X_ops_val,
@@ -103,10 +123,11 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 # TODO pretrain model MOJE:
 #  - load nasbench, get nb dataset, get MY io dataset (x)
 #  - get model and optimizer (x) ; get MY model and MY loss
-#  - for epoch in range(epochs):
-#      - for batch in batches:
-#         - ops, adj to cuda, PREPRO
-#         - forward and backward (take care of my loss)
+#  - for epoch in range(epochs): (x)
+#      - for batch in batches: (x)
+#         - ops, adj to cuda, PREPRO (x)
+#         - forward and backward (x)
+#         - (take care of my loss)
 #      - validity, uniqueness, val_accuracy
 #      - LOSS TOTAL, CHECKPOINT
 #
