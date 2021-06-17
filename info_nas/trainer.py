@@ -7,37 +7,36 @@ from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniquene
 from arch2vec.utils import preprocessing
 from arch2vec.models.configs import configs
 
+from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
 
-def _initialize_arch2vec_model(model):
+
+def _initialize_labeled_model(model):
     # TODO tady arch2vec + můj model
     return model
 
 
 # TODO zkusit trénovat paralelně model s io i bez io?
 
-def train(unlabeled, labeled, nasbench, device=None, batch_size=32, seed=1, epochs=8, config=4):
-    # nb_dataset is path to json or dict
+def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1,
+          epochs=8, config=4):
 
     config = configs[config]
 
+    #TODO seed it (ty všechny řádky)
+
+    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
+                                                                             batch_size=batch_size, n_workers=n_workers,
+                                                                             n_valid_workers=n_val_workers)
+
     model, optimizer = get_arch2vec_model(device=device)
-    model = _initialize_arch2vec_model(model)
-
-    # TODO tady prostě dát pryč indices a to samý v origo arch2vec (je to přece v extensions)
-    hash_train, X_adj_train, X_ops_train, _ = unlabeled["train"]
-    hash_val, X_adj_val, X_ops_val, _ = unlabeled["val"]
-    n_train, n_val = unlabeled["n_train"], unlabeled["n_val"]
-
-    # TODO batch'em
+    model_labeled = _initialize_labeled_model(model)
 
     loss_total = []
     for epoch in range(epochs):
         model.train()
 
-        # TODO shuffle (func kwarg)
-
+        # TODO train routine for both labeled/unlabeled (two models
         labeled_gen = enumerate()
-        # TODO střídat - možná
 
         loss_epoch = []
         Z = []
@@ -102,8 +101,8 @@ def train(unlabeled, labeled, nasbench, device=None, batch_size=32, seed=1, epoc
 
 
 # TODO pretrain model MOJE:
-#  - load nasbench, get nb dataset, get MY io dataset
-#  - get model and optimizer; get MY model and MY loss
+#  - load nasbench, get nb dataset, get MY io dataset (x)
+#  - get model and optimizer (x) ; get MY model and MY loss
 #  - for epoch in range(epochs):
 #      - for batch in batches:
 #         - ops, adj to cuda, PREPRO

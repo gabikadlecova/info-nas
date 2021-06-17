@@ -4,7 +4,7 @@ import torch
 import torch.utils.data
 
 
-def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0, shuffle=False, val_batch_size=100,
+def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0, shuffle=True, val_batch_size=100,
                              n_valid_workers=0, **kwargs):
 
     train_labeled = labeled_network_dataset(labeled['train_io'], labeled['train_net'])
