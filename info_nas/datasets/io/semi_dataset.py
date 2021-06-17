@@ -1,5 +1,38 @@
+import math
+
 import torch
 import torch.utils.data
+
+
+def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0, shuffle=False, val_batch_size=100,
+                             n_valid_workers=0, **kwargs):
+
+    train_labeled = labeled_network_dataset(labeled['train_io'], labeled['train_net'])
+    valid_labeled = labeled_network_dataset(labeled['valid_io'], labeled['valid_net'])
+
+    train_unlabeled = unlabeled_network_dataset(unlabeled['train'])
+    valid_unlabeled = unlabeled_network_dataset(unlabeled['val'])
+
+    n_labeled = labeled['train_io']['n_labeled']
+    train_dataset = SemiSupervisedDataset(train_labeled, train_unlabeled, n_labeled, k=k, batch_size=batch_size,
+                                          n_workers=n_workers, shuffle=shuffle, **kwargs)
+
+    valid_labeled_dataset = torch.utils.data.DataLoader(valid_labeled, batch_size=val_batch_size,
+                                                        num_workers=math.floor(n_valid_workers / 2), **kwargs)
+    valid_unlabeled_dataset = torch.utils.data.DataLoader(valid_unlabeled, batch_size=val_batch_size,
+                                                          num_workers=math.floor(n_valid_workers / 2), **kwargs)
+
+    return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
+
+
+def labeled_network_dataset(labeled_io, labeled_net):
+    adj, ops = labeled_net
+    return NetworkDataset(adj, ops, labeled_io['inputs'], labeled_io['outputs'])
+
+
+def unlabeled_network_dataset(dataset):
+    _, adj, ops, _ = dataset
+    return NetworkDataset(adj, ops)
 
 
 # TODO if larger dataset, load from file (IterableDataset - only for io, unlabeled are short enough)
@@ -20,14 +53,14 @@ class NetworkDataset(torch.utils.data.Dataset):
 
 
 class SemiSupervisedDataset:
-    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, batch_size=32, n_workers=0, shuffle=False, **kwargs):
+    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, batch_size=32, n_workers=0, shuffle=True, **kwargs):
         self.n, self.n_labeled, self.n_unlabeled = 0, 0, 0
 
         # datasets and their iterators
         self.labeled = torch.utils.data.DataLoader(labeled, batch_size=batch_size, shuffle=shuffle,
-                                                   num_workers=n_workers // 2, **kwargs)
+                                                   num_workers=math.floor(n_workers / 2), **kwargs)
         self.unlabeled = torch.utils.data.DataLoader(unlabeled, batch_size=batch_size, shuffle=shuffle,
-                                                     num_workers=n_workers // 2, **kwargs)
+                                                     num_workers=math.ceil(n_workers / 2), **kwargs)
         self.labeled_iter = None
         self.unlabeled_iter = None
 
@@ -91,5 +124,5 @@ class SemiSupervisedDataset:
         if self.n_unlabeled >= self.max_unlabeled:
             return True
 
-        curr_u = self.n_unlabeled / self.labeled_coef + 1
+        curr_u = self.n_unlabeled // self.labeled_coef + 1
         return (self.k * curr_u) > self.n_labeled

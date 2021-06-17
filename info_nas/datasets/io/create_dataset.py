@@ -10,7 +10,7 @@ from info_nas.datasets.networks.utils import load_trained_net
 
 def load_io_dataset(dataset_path: str, device=None):
     data = torch.load(dataset_path, map_location=device)
-    return data['net_hashes'], data['inputs'], data['outputs']
+    return data
 
 
 def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, random_state=1, device=None, **kwargs):
@@ -23,7 +23,7 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 
     hashes, inputs, outputs = dataset
 
-    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs}
+    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'n_labeled': len(networks)}
     torch.save(data, save_path)
 
     return hashes, inputs, outputs
