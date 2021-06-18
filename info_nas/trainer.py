@@ -19,7 +19,7 @@ def _initialize_labeled_model(model):
 # TODO zkusit trénovat paralelně model s io i bez io?
 
 def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1,
-          epochs=8, config=4):
+          epochs=8, config=4, print_frequency=1000):
 
     config = configs[config]
 
@@ -32,6 +32,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
     model, optimizer = get_arch2vec_model(device=device)
     model_labeled = _initialize_labeled_model(model)
 
+    dataset_len = len(train_dataset)
     loss_total = []
     for epoch in range(epochs):
         model.train()
@@ -81,10 +82,9 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
             optimizer.step()
 
-            # TODO prints
-            #loss_epoch.append(loss.item())
-            #if i % 1000 == 0:
-            #    print('epoch {}: batch {} / {}: loss: {:.5f}'.format(epoch, i, chunks, loss.item()))
+            loss_epoch.append(loss.item())
+            if i % print_frequency == 0:
+                print('epoch {}: batch {} / {}: loss: {:.5f}'.format(epoch, i, dataset_len, loss_epoch[-1]))
 
         Z = torch.cat(Z, dim=0)
         z_mean, z_std = Z.mean(0), Z.std(0)

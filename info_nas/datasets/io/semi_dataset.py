@@ -78,6 +78,9 @@ class SemiSupervisedDataset:
         assert self.labeled_coef >= 1, f"There cannot be more labeled nets than unlabeled " \
                                        f"({n_labeled_nets} vs {n_unlabeled_nets})."
 
+    def __len__(self):
+        return self.max_n
+
     def __iter__(self):
         self.n, self.n_labeled, self.n_unlabeled = 0, 0, 0
         self.labeled_iter = iter(self.labeled)
