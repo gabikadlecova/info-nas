@@ -1,5 +1,9 @@
 # TODO napsat že source je arch2vec s úpravama víceméně
+import numpy as np
+import random
 import torch
+import torch.backends.cudnn
+
 from arch2vec.models.model import VAEReconstructed_Loss
 from torch import nn
 
@@ -9,28 +13,40 @@ from arch2vec.utils import preprocessing
 from arch2vec.models.configs import configs
 
 from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
+from info_nas.models.conv_embeddings import SimpleConvModel
 
 
-def _initialize_labeled_model(model):
-    # TODO tady arch2vec + můj model
-    return model
+def _initialize_labeled_model(model, in_channels, out_channels, **kwargs):
+    # TODO config for kwargs
+    return SimpleConvModel(model, in_channels, out_channels, **kwargs)
 
 
 # TODO zkusit trénovat paralelně model s io i bez io?
 
 def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1,
-          epochs=8, config=4, print_frequency=1000):
+          epochs=8, config=4, print_frequency=1000, torch_deterministic=False, cudnn_deterministic=False):
 
     config = configs[config]
 
-    #TODO seed it (ty všechny řádky)
+    if torch_deterministic:
+        torch.use_deterministic_algorithms(True)
+
+    if cudnn_deterministic:
+        torch.backends.cudnn.deterministic = True
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+
+    in_channels, out_channels = labeled['train_io']['inputs'].shape[1], labeled['train_io']['outputs'].shape[1]
 
     train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
                                                                              batch_size=batch_size, n_workers=n_workers,
                                                                              n_valid_workers=n_val_workers)
 
     model, optimizer = get_arch2vec_model(device=device)
-    model_labeled = _initialize_labeled_model(model)
+    model_labeled = _initialize_labeled_model(model, in_channels, out_channels)  # TODO config and kwargs
 
     dataset_len = len(train_dataset)
     loss_total = []
@@ -122,7 +138,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
 # TODO pretrain model MOJE:
 #  - load nasbench, get nb dataset, get MY io dataset (x)
-#  - get model and optimizer (x) ; get MY model and MY loss
+#  - get model and optimizer (x) ; get MY model (x) and MY loss
 #  - for epoch in range(epochs): (x)
 #      - for batch in batches: (x)
 #         - ops, adj to cuda, PREPRO (x)
