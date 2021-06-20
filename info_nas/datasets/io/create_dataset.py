@@ -26,7 +26,7 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
     data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'n_labeled': len(networks)}
     torch.save(data, save_path)
 
-    return hashes, inputs, outputs
+    return data
 
 
 def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,

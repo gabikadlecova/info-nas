@@ -29,9 +29,6 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     nb_dataset = _generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
                                               **config['nb_dataset'])
 
-    if isinstance(dataset, str):
-        dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
-
     train_hashes, valid_hashes = split_to_labeled(nb_dataset, seed=seed, percent_labeled=percent_labeled)
 
     print('Processing labeled nets for the training set...')
@@ -47,8 +44,8 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                             raise_if_not_pretrained=raise_if_not_pretrained)
 
     # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
-    train_data = _ops_adj_from_hashes(train_labeled[0], nb_dataset["train"])
-    valid_data = _ops_adj_from_hashes(valid_labeled[0], nb_dataset["val"])
+    train_data = _ops_adj_from_hashes(train_labeled['net_hashes'], nb_dataset["train"])
+    valid_data = _ops_adj_from_hashes(valid_labeled['net_hashes'], nb_dataset["val"])
 
     labeled_dataset = {
         "train_io": train_labeled,
@@ -83,10 +80,10 @@ def _check_hashes(hashes, reference):
 
 
 def _load_labeled(net_dir, reference_hashes, device=None):
-    hashes, inputs, outputs = load_io_dataset(net_dir, device=device)
-    _check_hashes(hashes, reference_hashes)
+    dataset = load_io_dataset(net_dir, device=device)
+    _check_hashes(dataset['net_hashes'], reference_hashes)
 
-    return hashes, inputs, outputs
+    return dataset
 
 
 def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, **kwargs):
@@ -127,6 +124,9 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, ha
         print(f'Loading labeled dataset from {labeled_path}.')
         labeled = _load_labeled(labeled_path, hashes, device=device)
     else:
+        if isinstance(dataset, str):
+            dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
+
         _pretrain_if_needed(pretrained_path, nasbench, dataset, hashes, device=device, **config['pretrain'],
                             raise_if_not_pretrained=raise_if_not_pretrained)
 

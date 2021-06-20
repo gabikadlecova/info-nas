@@ -30,16 +30,16 @@ class SimpleConvModel(IOModel):
 
         super().__init__(vae_model)
 
-        self.process_z = LatentNodesFlatten(self.vae_model.hidden_dim, z_hidden=z_hidden)
+        self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
 
         channels = input_channels
         conv_list = []
 
         # handle concatenated zs
         if use_3x3_for_z:
-            conv_list.append(ConvBnRelu(channels + 1, channels, kernel_size=3, padding=1))
+            conv_list.append(ConvBnRelu(channels + z_hidden, channels, kernel_size=3, padding=1))
         else:
-            conv_list.append(ConvBnRelu(channels + 1, channels))
+            conv_list.append(ConvBnRelu(channels + z_hidden, channels))
 
         for _ in range(n_steps):
             for _ in range(n_convs - 1):
@@ -64,6 +64,6 @@ class SimpleConvModel(IOModel):
 
         # concat as a separate channel
         z = z.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, inputs.shape[2], inputs.shape[3])
-        in_and_z = torch.cat([inputs, z])
+        in_and_z = torch.cat([inputs, z], dim=1)
 
         return self.conv_list(in_and_z)
