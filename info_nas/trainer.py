@@ -3,7 +3,7 @@ import torch
 from arch2vec.models.model import VAEReconstructed_Loss
 from torch import nn
 
-from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model, get_nasbench_datasets
+from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
 from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing
 from arch2vec.models.configs import configs
