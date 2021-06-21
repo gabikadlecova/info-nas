@@ -64,6 +64,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
         n_labeled_batches = 0
         n_unlabeled_batches = 0
 
+        loss_epoch_labeled = []
         loss_epoch = []
         Z = []
         for i, batch in enumerate(train_dataset):
@@ -101,6 +102,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
                 # TODO loss
                 loss = labeled_loss(outs_recon, outputs)
+                loss_epoch_labeled.append(loss.item())
 
             adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
             adj, ops = prep_reverse(adj, ops)
@@ -115,7 +117,11 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
             loss_epoch.append(loss.item())
             if verbosity > 0 and i % print_frequency == 0:
-                print('epoch {}: batch {} / {}: loss: {:.5f}'.format(epoch, i, dataset_len, loss_epoch[-1]))
+                print('epoch {}: batch {} / {}: loss: {:.5f}, loss_labeled: {:.5f}'.format(epoch, i,
+                                                                                           dataset_len,
+                                                                                           loss_epoch[-1],
+                                                                                           loss_epoch_labeled[-1]))
+
                 print(f'epoch {epoch}: labeled batches: {n_labeled_batches}, unlabeled batches: {n_unlabeled_batches}')
 
         Z = torch.cat(Z, dim=0)

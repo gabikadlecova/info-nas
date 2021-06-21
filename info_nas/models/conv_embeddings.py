@@ -57,6 +57,7 @@ class SimpleConvModel(IOModel):
             conv_list.append(nn.Conv2d(channels, output_channels, 1, padding=0))
 
         self.conv_list = nn.Sequential(*conv_list)
+        self.activation = nn.Sigmoid()
 
     def inputs_forward(self, z, inputs):
         # process 2D latent features to a vector
@@ -66,4 +67,4 @@ class SimpleConvModel(IOModel):
         z = z.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, inputs.shape[2], inputs.shape[3])
         in_and_z = torch.cat([inputs, z], dim=1)
 
-        return self.conv_list(in_and_z)
+        return self.activation(self.conv_list(in_and_z))
