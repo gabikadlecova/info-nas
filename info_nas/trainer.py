@@ -24,7 +24,8 @@ def _initialize_labeled_model(model, in_channels, out_channels, **kwargs):
 # TODO zkusit trénovat paralelně model s io i bez io?
 
 def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1,
-          epochs=8, config=4, print_frequency=1000, torch_deterministic=False, cudnn_deterministic=False):
+          epochs=8, config=4, print_frequency=1000, torch_deterministic=False, cudnn_deterministic=False,
+          verbosity=2):
 
     config = configs[config]
 
@@ -47,6 +48,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
     model, optimizer = get_arch2vec_model(device=device)
     model_labeled = _initialize_labeled_model(model, in_channels, out_channels)  # TODO config and kwargs
+    labeled_loss = nn.MSELoss()
 
     dataset_len = len(train_dataset)
     loss_total = []
@@ -84,8 +86,8 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
                 # TODO Z by byly dost biased, leda mít zvlášť Z_labeled a převážit to
                 # Z.append(mu)
 
-                # TODO loss!!
-                loss = None
+                # TODO loss
+                loss = labeled_loss(outs_recon, outputs)
 
             adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
             adj, ops = prep_reverse(adj, ops)
@@ -99,7 +101,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
             optimizer.step()
 
             loss_epoch.append(loss.item())
-            if i % print_frequency == 0:
+            if verbosity > 0 and i % print_frequency == 0:
                 print('epoch {}: batch {} / {}: loss: {:.5f}'.format(epoch, i, dataset_len, loss_epoch[-1]))
 
         Z = torch.cat(Z, dim=0)
@@ -107,25 +109,25 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
         validity, uniqueness = eval_validity_and_uniqueness(model, z_mean, z_std, nasbench, device=device)
 
-        # TODO prints
-        print('Ratio of valid decodings from the prior: {:.4f}'.format(validity))
-        print('Ratio of unique decodings from the prior: {:.4f}'.format(uniqueness))
+        if verbosity > 1:
+            print('Ratio of valid decodings from the prior: {:.4f}'.format(validity))
+            print('Ratio of unique decodings from the prior: {:.4f}'.format(uniqueness))
 
-        # TODO validation set, modify eval function
+        # TODO validation set for LABELED
         acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val = eval_validation_accuracy(model,
-                                                                                                     X_adj_val,
-                                                                                                     X_ops_val,
-                                                                                                     n_val,
+                                                                                                     valid_unlabeled,
                                                                                                      config=config,
                                                                                                      device=device)
 
-        # TODO print
-        print(
-            'validation set: acc_ops:{0:.4f}, mean_corr_adj:{1:.4f}, mean_fal_pos_adj:{2:.4f}, acc_adj:{3:.4f}'.format(
-                acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val
+        if verbosity > 1:
+            print(
+                'validation set: acc_ops:{0:.4f}, mean_corr_adj:{1:.4f}, mean_fal_pos_adj:{2:.4f}, acc_adj:{3:.4f}'.format(
+                    acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val
+                )
             )
-        )
-        print('epoch {}: average loss {:.5f}'.format(epoch, sum(loss_epoch) / len(loss_epoch)))
+
+        if verbosity > 0:
+            print('epoch {}: average loss {:.5f}'.format(epoch, sum(loss_epoch) / len(loss_epoch)))
 
         loss_total.append(sum(loss_epoch) / len(loss_epoch))
         # TODO checkpoint, jen jednou za x
@@ -133,7 +135,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
         # TODO tensorboard?
 
     print('loss for epochs: \n', loss_total)
-    # TODO ještě lepší zaznamenání výsledků
+    # TODO lepší zaznamenání výsledků
 
 
 # TODO pretrain model MOJE:
@@ -143,9 +145,8 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 #      - for batch in batches: (x)
 #         - ops, adj to cuda, PREPRO (x)
 #         - forward and backward (x)
-#         - (take care of my loss)
+#         - (take care of my loss) (x)
 #      - validity, uniqueness, val_accuracy
 #      - LOSS TOTAL, CHECKPOINT
-#
-# TODO ... ještě jednou zkontrolovat dle pretrain_nasbench_101
+
 
