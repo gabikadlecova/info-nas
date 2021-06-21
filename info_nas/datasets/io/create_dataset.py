@@ -95,8 +95,8 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=No
 
             in_list, out_list = net.get_cell_outputs(inputs, return_inputs=True)
 
-            in_data.append(in_list[nth_input])
-            out_data.append(out_list[nth_output])
+            in_data.append(in_list[nth_input].to('cpu'))
+            out_data.append(out_list[nth_output].to('cpu'))
 
             if num_data is None:
                 n_tests += len(targets)

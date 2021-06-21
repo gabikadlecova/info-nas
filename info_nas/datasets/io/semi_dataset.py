@@ -1,4 +1,5 @@
 import math
+import warnings
 
 import torch
 import torch.utils.data
@@ -71,7 +72,13 @@ class SemiSupervisedDataset:
 
         # values that determine when to draw unlabeled vs labeled batches
         n_unlabeled_nets = self.max_unlabeled
+        n_labeled_orig = n_labeled_nets
         n_labeled_nets = n_labeled_nets // batch_size
+
+        if n_labeled_nets == 0:
+            warnings.warn(f"The number of labeled nets is less than the batch size ({n_labeled_orig} vs {batch_size}).")
+            n_labeled_nets = 1
+
         self.k = k
 
         self.labeled_coef = n_unlabeled_nets // n_labeled_nets

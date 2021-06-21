@@ -21,7 +21,7 @@ class IOModel(nn.Module):
         ops_recon, adj_recon, mu, logvar, z = self.vae_model.forward(ops, args)
         outputs = self.inputs_forward(z, inputs)
 
-        return ops_recon, adj_recon, mu, logvar, outputs
+        return ops_recon, adj_recon, mu, logvar, z, outputs
 
 
 class SimpleConvModel(IOModel):

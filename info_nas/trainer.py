@@ -16,9 +16,14 @@ from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
 from info_nas.models.conv_embeddings import SimpleConvModel
 
 
-def _initialize_labeled_model(model, in_channels, out_channels, **kwargs):
+def _initialize_labeled_model(model, in_channels, out_channels, device=None, **kwargs):
     # TODO config for kwargs
-    return SimpleConvModel(model, in_channels, out_channels, **kwargs)
+
+    model = SimpleConvModel(model, in_channels, out_channels, **kwargs)
+    if device is not None:
+        model = model.to(device)
+
+    return model
 
 
 # TODO zkusit trénovat paralelně model s io i bez io?
@@ -47,22 +52,30 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
                                                                              n_valid_workers=n_val_workers)
 
     model, optimizer = get_arch2vec_model(device=device)
-    model_labeled = _initialize_labeled_model(model, in_channels, out_channels)  # TODO config and kwargs
+    model_labeled = _initialize_labeled_model(model, in_channels, out_channels, device=device)  # TODO config and kwargs
     labeled_loss = nn.MSELoss()
 
     dataset_len = len(train_dataset)
     loss_total = []
     for epoch in range(epochs):
         model.train()
+        model_labeled.train()
+
+        n_labeled_batches = 0
+        n_unlabeled_batches = 0
 
         loss_epoch = []
         Z = []
         for i, batch in enumerate(train_dataset):
             if len(batch) == 2:
                 adj, ops = batch
+
+                n_unlabeled_batches += 1
             elif len(batch) == 4:
                 adj, ops, inputs, outputs = batch
                 inputs, outputs = inputs.to(device), outputs.to(device)
+
+                n_labeled_batches += 1
             else:
                 raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or 4.")
 
@@ -75,13 +88,13 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
             # forward
             if len(batch) == 2:
                 # unlabeled (original model)
-                ops_recon, adj_recon, mu, logvar = model(ops, adj.to(torch.long))
+                ops_recon, adj_recon, mu, logvar, _ = model(ops, adj.to(torch.long))
                 Z.append(mu)
 
                 loss = None
             else:
                 # labeled (extended model)
-                ops_recon, adj_recon, mu, logvar, outs_recon = model_labeled(ops, adj.to(torch.long), inputs)
+                ops_recon, adj_recon, mu, logvar, _, outs_recon = model_labeled(ops, adj.to(torch.long), inputs)
 
                 # TODO Z by byly dost biased, leda mít zvlášť Z_labeled a převážit to
                 # Z.append(mu)
@@ -103,6 +116,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
             loss_epoch.append(loss.item())
             if verbosity > 0 and i % print_frequency == 0:
                 print('epoch {}: batch {} / {}: loss: {:.5f}'.format(epoch, i, dataset_len, loss_epoch[-1]))
+                print(f'epoch {epoch}: labeled batches: {n_labeled_batches}, unlabeled batches: {n_unlabeled_batches}')
 
         Z = torch.cat(Z, dim=0)
         z_mean, z_std = Z.mean(0), Z.std(0)
@@ -136,6 +150,9 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 
     print('loss for epochs: \n', loss_total)
     # TODO lepší zaznamenání výsledků
+
+    # TODO return more things, save model
+    return model_labeled
 
 
 # TODO pretrain model MOJE:
