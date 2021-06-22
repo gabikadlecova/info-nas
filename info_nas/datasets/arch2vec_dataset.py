@@ -5,7 +5,7 @@ import os
 
 import torch
 
-from info_nas.datasets.config import cfg
+from info_nas.datasets.config import local_cfg
 from info_nas.datasets.io.create_dataset import load_io_dataset, dataset_from_pretrained
 from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
 from arch2vec.preprocessing.gen_json import gen_json_file
@@ -24,10 +24,10 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     # creates/loads both the original dataset and the labeled io dataset
 
     if config is None:
-        config = cfg
+        config = local_cfg
 
-    nb_dataset = _generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
-                                              **config['nb_dataset'])
+    nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
+                                             **config['nb_dataset'])
 
     train_hashes, valid_hashes = split_to_labeled(nb_dataset, seed=seed, percent_labeled=percent_labeled)
 
@@ -86,7 +86,7 @@ def _load_labeled(net_dir, reference_hashes, device=None):
     return dataset
 
 
-def _generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, **kwargs):
+def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, **kwargs):
     if save_path is not None and os.path.exists(save_path):
         print(f"Loading nasbench dataset (arch2vec) from {save_path}")
         dataset = save_path
@@ -118,7 +118,7 @@ def _pretrain_if_needed(pretrained_path, nasbench, dataset, net_hashes, device=N
 def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, hashes, seed=1, device=None, config=None,
                             raise_if_not_pretrained=True):
     if config is None:
-        config = cfg
+        config = local_cfg
 
     if os.path.exists(labeled_path):
         print(f'Loading labeled dataset from {labeled_path}.')

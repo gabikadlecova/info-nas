@@ -1,4 +1,6 @@
-cfg = {
+import json
+
+local_cfg = {
     'cifar-10': {
         'batch_size': 32,
         'validation_size': 1000,
@@ -6,13 +8,11 @@ cfg = {
     },
 
     'nb_dataset': {
-        'test_size': 0.1,
-        'val_batch_size': None
+        'test_size': 0.1
     },
 
     'pretrain': {
-        'num_epochs': 10,
-        'num_labels': 10
+        'num_epochs': 10
     },
     'io': {
         'nth_input': 0,
@@ -20,3 +20,8 @@ cfg = {
         'loss': None
     }
 }
+
+
+def load_json_cfg(config_path):
+    with open(config_path, 'r') as f:
+        return json.load(f)

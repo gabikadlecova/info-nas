@@ -7,7 +7,7 @@ from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net
 
 
 def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=None, num_epochs=10, num_labels=10,
-                             dir_path='./checkpoints/', skip_existing=True):
+                             dir_path='./checkpoints/', skip_existing=True, **kwargs):
 
     train_set, n_train, val_set, n_val, test_set, n_test = dataset
 
@@ -26,16 +26,17 @@ def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=No
         # train net and save it
         net = net.to(device)
         net, metrics = pretrain_network_cifar(net, train_set, val_set, test_set,
-                                              num_tests=n_test, num_epochs=num_epochs, device=device)
+                                              num_tests=n_test, num_epochs=num_epochs, device=device, **kwargs)
 
         save_trained_net(net_hash, net, info=metrics, net_args=[num_labels], dir_path=dir_path)
 
 
-def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None, num_epochs=108, device=None):
+def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None, num_epochs=108, device=None,
+                           print_frequency=50, **kwargs):
 
     # TODO will be changed if more metrics needed
     loss, acc, val_loss, val_acc = train(net, train_loader, validation_loader=valid_loader, num_epochs=num_epochs,
-                                         device=device)
+                                         device=device, print_frequency=print_frequency, **kwargs)
 
     test_loss, test_acc = test(net, test_loader, num_tests=num_tests)
 

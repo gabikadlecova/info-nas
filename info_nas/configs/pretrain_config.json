@@ -1,0 +1,16 @@
+{
+    "cifar-10": {
+        "batch_size": 256,
+        "validation_size": 1000,
+        "num_workers": 8
+    },
+
+    "nb_dataset": {
+        "test_size": 0.1
+    },
+
+    "pretrain": {
+        "num_epochs": 12,
+        "optimizer": "SGD"
+    }
+}
