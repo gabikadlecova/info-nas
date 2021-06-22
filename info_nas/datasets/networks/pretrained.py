@@ -14,9 +14,9 @@ def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=No
     net_hashes = [n for n in net_hashes if not (skip_existing and is_net_pretrained(n, dir_path=dir_path))]
     print(f"Pretraining {len(net_hashes)} network{'s' if len(net_hashes) > 1 else ''}.\n----------------------------\n")
 
-    for net_hash in net_hashes:
+    for i, net_hash in enumerate(net_hashes):
         print('--------------------')
-        print(f"Pretraining network {net_hash}.")
+        print(f"Pretraining network {i}/{len(net_hashes)}: {net_hash}.")
         now = datetime.now()
         print(now.strftime("%d/%m/%Y %H:%M:%S\n--------------------"))
 
