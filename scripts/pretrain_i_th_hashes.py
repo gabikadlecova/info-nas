@@ -2,6 +2,7 @@ import click
 import json
 import os
 import pandas as pd
+import torch
 
 from info_nas.datasets.config import local_cfg, load_json_cfg
 from info_nas.datasets.networks.pretrained import pretrain_network_dataset
@@ -20,6 +21,8 @@ from scripts.utils import mkdir_if_not_exists
 @click.option('--seed', default=1)
 @click.option('--device', default='cuda')
 def main(hashes_dir, chunk_no, prefix, nasbench_path, config_path, root, seed, device):
+    device = torch.device(device)
+
     # load hashes
 
     chunk_path = os.path.join(hashes_dir, f"{prefix}{chunk_no}.csv")
