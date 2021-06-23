@@ -16,7 +16,7 @@ def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=No
 
     for i, net_hash in enumerate(net_hashes):
         print('--------------------')
-        print(f"Pretraining network {i}/{len(net_hashes)}: {net_hash}.")
+        print(f"Pretraining network {i + 1}/{len(net_hashes)}: {net_hash}.")
         now = datetime.now()
         print(now.strftime("%d/%m/%Y %H:%M:%S\n--------------------"))
 
