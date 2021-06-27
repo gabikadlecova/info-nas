@@ -3,6 +3,7 @@ import numpy as np
 import random
 import torch
 import torch.backends.cudnn
+from torch.utils.tensorboard import SummaryWriter
 
 from arch2vec.models.model import VAEReconstructed_Loss
 from info_nas.models.utils import save_extended_vae
@@ -33,7 +34,7 @@ def _initialize_labeled_model(model, in_channels, out_channels, model_config=Non
 
 def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, device=None, batch_size=32, k=1,
           n_workers=0, n_val_workers=0, seed=1, epochs=8, config=4, print_frequency=1000, torch_deterministic=False,
-          cudnn_deterministic=False, verbosity=2):
+          cudnn_deterministic=False, writer_dir=None, verbose=2):
 
     # arch2vec config
     config = configs[config]
@@ -55,6 +56,12 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
     torch.cuda.manual_seed(seed)
     np.random.seed(seed)
 
+    # TODO finish writer
+    if writer_dir is not None:
+        writer = SummaryWriter(writer_dir)
+    else:
+        writer = None
+
     in_channels, out_channels = labeled['train_io']['inputs'].shape[1], labeled['train_io']['outputs'].shape[1]
 
     train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
@@ -66,6 +73,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
                                               device=device, model_config=model_config)
     labeled_loss = losses_dict[model_config['loss']]
 
+    # TODO move all losses and evaluation to separate functions (so I don't eval it twice)
     dataset_len = len(train_dataset)
     loss_total = []
     loss_total_labeled = []
@@ -128,7 +136,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
             optimizer.step()
 
             loss_epoch.append(loss.item())
-            if verbosity > 0 and i % print_frequency == 0:
+            if verbose > 0 and i % print_frequency == 0:
                 print('epoch {}: batch {} / {}: loss: {:.5f}, loss_labeled: {:.5f}'.format(epoch, i,
                                                                                            dataset_len,
                                                                                            loss_epoch[-1],
@@ -141,7 +149,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
 
         validity, uniqueness = eval_validity_and_uniqueness(model, z_mean, z_std, nasbench, device=device)
 
-        if verbosity > 1:
+        if verbose > 1:
             print('Ratio of valid decodings from the prior: {:.4f}'.format(validity))
             print('Ratio of unique decodings from the prior: {:.4f}'.format(uniqueness))
 
@@ -151,14 +159,14 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
                                                                                                      config=config,
                                                                                                      device=device)
 
-        if verbosity > 1:
+        if verbose > 1:
             print(
                 'validation set: acc_ops:{0:.4f}, mean_corr_adj:{1:.4f}, mean_fal_pos_adj:{2:.4f}, acc_adj:{3:.4f}'.format(
                     acc_ops_val, mean_corr_adj_val, mean_fal_pos_adj_val, acc_adj_val
                 )
             )
 
-        if verbosity > 0:
+        if verbose > 0:
             print('epoch {}: average loss {:.5f}'.format(epoch, sum(loss_epoch) / len(loss_epoch)))
 
         loss_total.append(sum(loss_epoch) / len(loss_epoch))
@@ -171,8 +179,9 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
 
         # TODO tensorboard?
 
-    print('loss for epochs: \n', loss_total)
-    print('labeled loss for epochs: \n', loss_total_labeled)
+    if verbose > 0:
+        print('loss for epochs: \n', loss_total)
+        print('labeled loss for epochs: \n', loss_total_labeled)
     # TODO lepší zaznamenání výsledků
 
     # TODO return more things
