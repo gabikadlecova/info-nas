@@ -4,7 +4,7 @@ import os
 import pandas as pd
 import torch
 
-from info_nas.datasets.config import local_cfg, load_json_cfg
+from info_nas.config import local_dataset_cfg, load_json_cfg
 from info_nas.datasets.networks.pretrained import pretrain_network_dataset
 from nasbench import api
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
@@ -16,7 +16,7 @@ from scripts.utils import mkdir_if_not_exists
 @click.argument('chunk_no')
 @click.option('--prefix', default='hashes_')
 @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
-@click.option('--config_path', default='../info_nas/configs/pretrain_config.json')
+@click.option('--config_path', default='../configs/pretrain_config.json')
 @click.option('--root', default='../data/cifar/')
 @click.option('--seed', default=1)
 @click.option('--device', default='cuda')
@@ -35,7 +35,7 @@ def main(hashes_dir, chunk_no, prefix, nasbench_path, config_path, root, seed, d
     # pretrain
 
     if not len(config_path) or config_path is None:
-        config = local_cfg
+        config = local_dataset_cfg
     else:
         config = load_json_cfg(config_path)
 

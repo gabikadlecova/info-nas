@@ -13,13 +13,19 @@ from arch2vec.utils import preprocessing
 from arch2vec.models.configs import configs
 
 from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
-from info_nas.models.conv_embeddings import SimpleConvModel
+from info_nas.models.io_model import model_dict
+from info_nas.config import local_model_cfg, load_json_cfg
 
 
-def _initialize_labeled_model(model, in_channels, out_channels, device=None, **kwargs):
-    # TODO config for kwargs
+def _initialize_labeled_model(model, in_channels, out_channels, model_config=None, device=None):
+    if model_config is None:
+        model_config = local_model_cfg
+    elif isinstance(model_config, str):
+        model_config = load_json_cfg(model_config)
 
-    model = SimpleConvModel(model, in_channels, out_channels, **kwargs)
+    model_class = model_dict[model_config['model_class']]
+
+    model = model_class(model, in_channels, out_channels, **model_config['model_kwargs'])
     if device is not None:
         model = model.to(device)
 

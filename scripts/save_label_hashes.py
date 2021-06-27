@@ -2,7 +2,7 @@ import click
 import os
 import pandas as pd
 
-from info_nas.datasets.config import local_cfg, load_json_cfg
+from info_nas.config import local_dataset_cfg, load_json_cfg
 from info_nas.datasets.arch2vec_dataset import split_to_labeled, generate_or_load_nb_dataset
 from nasbench import api
 
@@ -14,11 +14,11 @@ from scripts.utils import mkdir_if_not_exists
 @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
 @click.option('--arch2vec_path', default='../data/nb_dataset.json')
 @click.option('--seed', default=1)
-@click.option('--config_path', default='../info_nas/configs/pretrain_config.json')
+@click.option('--config_path', default='../configs/pretrain_config.json')
 @click.option('--percent_labeled', default=0.01)
 def main(save_dir, nasbench_path, arch2vec_path, seed, config_path, percent_labeled):
     if not len(config_path) or config_path is None:
-        config = local_cfg
+        config = local_dataset_cfg
     else:
         config = load_json_cfg(config_path)
 

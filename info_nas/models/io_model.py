@@ -2,9 +2,10 @@ import torch
 import torch.nn as nn
 from abc import abstractmethod
 
-# TODO  2 ways
+# TODO  3 ways
 #    a) encode input into a vec
 #    b) the embedding is the second actual input
+#    c) vae of io data first, then dense (u-)net
 from info_nas.models.utils import ConvBnRelu, LatentNodesFlatten
 
 
@@ -24,7 +25,7 @@ class IOModel(nn.Module):
         return ops_recon, adj_recon, mu, logvar, z, outputs
 
 
-class SimpleConvModel(IOModel):
+class ConcatConvModel(IOModel):
     def __init__(self, vae_model, input_channels, output_channels, z_hidden=16, n_steps=2, n_convs=2,
                  use_3x3_for_z=False, use_3x3_for_output=False):
 
@@ -68,3 +69,8 @@ class SimpleConvModel(IOModel):
         in_and_z = torch.cat([inputs, z], dim=1)
 
         return self.activation(self.conv_list(in_and_z))
+
+
+model_dict = {
+    'concat': ConcatConvModel
+}
