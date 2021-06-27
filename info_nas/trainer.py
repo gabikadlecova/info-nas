@@ -5,6 +5,7 @@ import torch
 import torch.backends.cudnn
 
 from arch2vec.models.model import VAEReconstructed_Loss
+from info_nas.models.utils import save_extended_vae
 from torch import nn
 
 from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
@@ -15,14 +16,10 @@ from arch2vec.models.configs import configs
 from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
 from info_nas.models.io_model import model_dict
 from info_nas.config import local_model_cfg, load_json_cfg
+from info_nas.models.losses import losses_dict
 
 
 def _initialize_labeled_model(model, in_channels, out_channels, model_config=None, device=None):
-    if model_config is None:
-        model_config = local_model_cfg
-    elif isinstance(model_config, str):
-        model_config = load_json_cfg(model_config)
-
     model_class = model_dict[model_config['model_class']]
 
     model = model_class(model, in_channels, out_channels, **model_config['model_kwargs'])
@@ -34,11 +31,18 @@ def _initialize_labeled_model(model, in_channels, out_channels, model_config=Non
 
 # TODO zkusit trénovat paralelně model s io i bez io?
 
-def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1,
-          epochs=8, config=4, print_frequency=1000, torch_deterministic=False, cudnn_deterministic=False,
-          verbosity=2):
+def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, device=None, batch_size=32, k=1,
+          n_workers=0, n_val_workers=0, seed=1, epochs=8, config=4, print_frequency=1000, torch_deterministic=False,
+          cudnn_deterministic=False, verbosity=2):
 
+    # arch2vec config
     config = configs[config]
+
+    # io model config
+    if model_config is None:
+        model_config = local_model_cfg
+    elif isinstance(model_config, str):
+        model_config = load_json_cfg(model_config)
 
     if torch_deterministic:
         torch.use_deterministic_algorithms(True)
@@ -58,11 +62,13 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
                                                                              n_valid_workers=n_val_workers)
 
     model, optimizer = get_arch2vec_model(device=device)
-    model_labeled = _initialize_labeled_model(model, in_channels, out_channels, device=device)  # TODO config and kwargs
-    labeled_loss = nn.MSELoss()
+    model_labeled = _initialize_labeled_model(model, in_channels, out_channels,
+                                              device=device, model_config=model_config)
+    labeled_loss = losses_dict[model_config['loss']]
 
     dataset_len = len(train_dataset)
     loss_total = []
+    loss_total_labeled = []
     for epoch in range(epochs):
         model.train()
         model_labeled.train()
@@ -156,14 +162,20 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
             print('epoch {}: average loss {:.5f}'.format(epoch, sum(loss_epoch) / len(loss_epoch)))
 
         loss_total.append(sum(loss_epoch) / len(loss_epoch))
-        # TODO checkpoint, jen jednou za x
+        loss_total_labeled.append(sum(loss_epoch_labeled) / len(loss_epoch_labeled))
+
+        make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
+        if epoch == epochs + 1 or make_checkpoint:
+            save_extended_vae(checkpoint_path, model_labeled, optimizer, epoch, loss_total[-1], loss_total_labeled[-1],
+                              model_config['model_class'], model_config['model_kwargs'])
 
         # TODO tensorboard?
 
     print('loss for epochs: \n', loss_total)
+    print('labeled loss for epochs: \n', loss_total_labeled)
     # TODO lepší zaznamenání výsledků
 
-    # TODO return more things, save model
+    # TODO return more things
     return model_labeled
 
 
@@ -175,7 +187,7 @@ def train(labeled, unlabeled, nasbench, device=None, batch_size=32, k=1, n_worke
 #         - ops, adj to cuda, PREPRO (x)
 #         - forward and backward (x)
 #         - (take care of my loss) (x)
-#      - validity, uniqueness, val_accuracy
+#      - validity, uniqueness, val_accuracy (x)
 #      - LOSS TOTAL, CHECKPOINT
 
 

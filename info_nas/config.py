@@ -29,7 +29,9 @@ local_model_cfg = {
         'n_convs': 2,
         'use_3x3_for_z': False,
         'use_3x3_for_output': False
-    }
+    },
+    'loss': 'MSE',
+    'checkpoint': 5
 }
 
 
