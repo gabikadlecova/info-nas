@@ -30,112 +30,45 @@ def _initialize_labeled_model(model, in_channels, out_channels, model_config=Non
     return model
 
 
-# TODO zkusit trénovat paralelně model s io i bez io?
-
-def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, device=None, batch_size=32, k=1,
-          n_workers=0, n_val_workers=0, seed=1, epochs=8, config=4, print_frequency=1000, torch_deterministic=False,
-          cudnn_deterministic=False, writer_dir=None, verbose=2):
-
-    # arch2vec config
-    config = configs[config]
-
-    # io model config
-    if model_config is None:
-        model_config = local_model_cfg
-    elif isinstance(model_config, str):
-        model_config = load_json_cfg(model_config)
-
-    if torch_deterministic:
-        torch.use_deterministic_algorithms(True)
-
-    if cudnn_deterministic:
-        torch.backends.cudnn.deterministic = True
-
-    random.seed(seed)
-    torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    np.random.seed(seed)
-
-    # TODO finish writer
-    if writer_dir is not None:
-        writer = SummaryWriter(writer_dir)
+def _forward_batch(model, adj, ops, inputs=None):
+    # forward
+    if inputs is None:
+        # unlabeled (original model)
+        model_out = model(ops, adj.to(torch.long))
     else:
-        writer = None
+        # labeled (extended model)
+        model_out = model(ops, adj.to(torch.long), inputs)
 
-    in_channels, out_channels = labeled['train_io']['inputs'].shape[1], labeled['train_io']['outputs'].shape[1]
+    return model_out
 
-    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
-                                                                             batch_size=batch_size, n_workers=n_workers,
-                                                                             n_valid_workers=n_val_workers)
 
-    model, optimizer = get_arch2vec_model(device=device)
-    model_labeled = _initialize_labeled_model(model, in_channels, out_channels,
-                                              device=device, model_config=model_config)
-    labeled_loss = losses_dict[model_config['loss']]
+def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_history, outputs=None):
+    ops_recon, adj_recon, mu, logvar, = model_out[:4]
 
-    # TODO move all losses and evaluation to separate functions (so I don't eval it twice)
-    dataset_len = len(train_dataset)
-    loss_total = []
-    loss_total_labeled = []
-    for epoch in range(epochs):
-        model.train()
-        model_labeled.train()
+    adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
+    adj, ops = prep_reverse(adj, ops)
 
-        n_labeled_batches = 0
-        n_unlabeled_batches = 0
+    if outputs is not None:
+        assert len(model_out) == 6
+        outs_recon = model_out[-1]
 
-        loss_epoch_labeled = []
-        loss_epoch = []
-        Z = []
-        for i, batch in enumerate(train_dataset):
-            if len(batch) == 2:
-                adj, ops = batch
+        labeled_out = loss_labeled(outs_recon, outputs)
+    else:
+        labeled_out = None
 
-                n_unlabeled_batches += 1
-            elif len(batch) == 4:
-                adj, ops, inputs, outputs = batch
-                inputs, outputs = inputs.to(device), outputs.to(device)
+    vae_out = loss((ops_recon, adj_recon), (ops, adj), mu, logvar)
+    total_out = vae_out + labeled_out if labeled_out is not None else vae_out
 
-                n_labeled_batches += 1
-            else:
-                raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or 4.")
+    loss_history.append({
+        'total': total_out.item(),
+        'unlabeled': vae_out.item(),
+        'labeled': labeled_out.item()
+    })
 
-            optimizer.zero_grad()
+    return total_out
 
-            # preprocessing
-            adj, ops = adj.to(device), ops.to(device)
-            adj, ops, prep_reverse = preprocessing(adj, ops, **config['prep'])
-
-            # forward
-            if len(batch) == 2:
-                # unlabeled (original model)
-                ops_recon, adj_recon, mu, logvar, _ = model(ops, adj.to(torch.long))
-                Z.append(mu)
-
-                loss = None
-            else:
-                # labeled (extended model)
-                ops_recon, adj_recon, mu, logvar, _, outs_recon = model_labeled(ops, adj.to(torch.long), inputs)
-
-                # TODO Z by byly dost biased, leda mít zvlášť Z_labeled a převážit to
-                # Z.append(mu)
-
-                # TODO loss
-                loss = labeled_loss(outs_recon, outputs)
-                loss_epoch_labeled.append(loss.item())
-
-            adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
-            adj, ops = prep_reverse(adj, ops)
-
-            vae_loss = VAEReconstructed_Loss(**config['loss'])((ops_recon, adj_recon), (ops, adj), mu, logvar)
-            loss = vae_loss if loss is None else vae_loss + loss
-            loss.backward()
-
-            nn.utils.clip_grad_norm_(model.parameters(), 5)
-
-            optimizer.step()
-
-            loss_epoch.append(loss.item())
+"""
+loss_epoch.append(loss.item())
             if verbose > 0 and i % print_frequency == 0:
                 print('epoch {}: batch {} / {}: loss: {:.5f}, loss_labeled: {:.5f}'.format(epoch, i,
                                                                                            dataset_len,
@@ -171,13 +104,151 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, model_config=None, devi
 
         loss_total.append(sum(loss_epoch) / len(loss_epoch))
         loss_total_labeled.append(sum(loss_epoch_labeled) / len(loss_epoch_labeled))
+"""
+
+# TODO remove labeled hashes from unlabeled
+
+# TODO zkusit trénovat paralelně model s io i bez io?
+
+
+def _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled, loss_list,
+                    eval_labeled=False):
+
+    optimizer.zero_grad()
+
+    # adj, ops preprocessing
+    adj, ops = batch[0], batch[1]
+    adj, ops = adj.to(device), ops.to(device)
+    adj, ops, prep_reverse = preprocessing(adj, ops, **config['prep'])
+
+    # labeled vs unlabeled batches
+    if eval_labeled:
+        inputs, outputs = batch[2].to(device), batch[3].to(device)
+    else:
+        inputs, outputs = None, None
+
+    # forward
+    model_out = _forward_batch(model, adj, ops, inputs=inputs)
+
+    loss_out = _eval_batch(model_out, adj, ops, prep_reverse, loss_func_vae, loss_func_labeled,
+                           loss_list, outputs=outputs)
+
+    loss_out.backward()
+
+    nn.utils.clip_grad_norm_(model.parameters(), 5)
+    optimizer.step()
+
+
+def _init_config_and_seeds(config, model_config, seed, torch_deterministic, cudnn_deterministic):
+    # arch2vec config
+    config = configs[config]
+
+    # io model config
+    if model_config is None:
+        model_config = local_model_cfg
+    elif isinstance(model_config, str):
+        model_config = load_json_cfg(model_config)
+
+    if torch_deterministic:
+        torch.use_deterministic_algorithms(True)
+
+    if cudnn_deterministic:
+        torch.backends.cudnn.deterministic = True
+
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    np.random.seed(seed)
+
+    return config, model_config
+
+
+def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=False, model_config=None, device=None,
+          batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1, epochs=8, config=4, print_frequency=1000,
+          torch_deterministic=False, cudnn_deterministic=False, writer=None, verbose=2):
+
+    config, model_config = _init_config_and_seeds(config, model_config, seed, torch_deterministic, cudnn_deterministic)
+
+    # TODO finish writer
+    if writer is not None:
+        writer = SummaryWriter(writer)
+
+    # init dataset
+    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
+                                                                             batch_size=batch_size, n_workers=n_workers,
+                                                                             n_valid_workers=n_val_workers)
+    dataset_len = len(train_dataset)
+
+    # init models
+    in_channels, out_channels = labeled['train_io']['inputs'].shape[1], labeled['train_io']['outputs'].shape[1]
+
+    model, optimizer = get_arch2vec_model(device=device)
+    model_labeled = _initialize_labeled_model(model, in_channels, out_channels,
+                                              device=device, model_config=model_config)
+    if use_reference_model:
+        model_ref, optimizer_ref = get_arch2vec_model(device=device)
+        model_ref.load_state_dict(model.state_dict())
+
+    # init losses and logs
+    loss_func_vae = VAEReconstructed_Loss(**config['loss'])
+    loss_func_labeled = losses_dict[model_config['loss']]
+
+    loss_lists_total = {
+        'labeled': [],
+        'unlabeled': [],
+        'reference': []
+    }
+
+    for epoch in range(epochs):
+        model.train()
+        model_labeled.train()
+
+        n_labeled_batches, n_unlabeled_batches = 0, 0
+
+        #TODO metrics dict
+        #TODO
+
+        loss_lists_epoch = {
+            'labeled': [],
+            'unlabeled': [],
+            'reference': []
+        }
+
+        Z = []
+
+        for i, batch in enumerate(train_dataset):
+            if len(batch) == 2:
+                extended_model = model
+                loss_list = loss_lists_epoch['unlabeled']
+                is_labeled = False
+
+                n_unlabeled_batches += 1
+
+            elif len(batch) == 4:
+                extended_model = model_labeled
+                loss_list = loss_lists_epoch['labeled']
+                is_labeled = True
+
+                n_labeled_batches += 1
+            else:
+                raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or 4.")
+
+            _train_on_batch(extended_model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled,
+                            loss_list, eval_labeled=is_labeled)
+
+            if use_reference_model:
+                _train_on_batch(model_ref, batch, optimizer_ref, device, config, loss_func_vae, loss_func_labeled,
+                                loss_lists_epoch['reference'], eval_labeled=False)
 
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
         if epoch == epochs + 1 or make_checkpoint:
             save_extended_vae(checkpoint_path, model_labeled, optimizer, epoch, loss_total[-1], loss_total_labeled[-1],
                               model_config['model_class'], model_config['model_kwargs'])
 
+        # TODO eval epoch + eval reference possibly (all losses in loss dicts, then move it to total. also prints.).
+
         # TODO tensorboard?
+
 
     if verbose > 0:
         print('loss for epochs: \n', loss_total)
