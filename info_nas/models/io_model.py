@@ -6,7 +6,7 @@ from abc import abstractmethod
 #    a) encode input into a vec
 #    b) the embedding is the second actual input
 #    c) vae of io data first, then dense (u-)net
-from info_nas.models.utils import ConvBnRelu, LatentNodesFlatten
+from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten
 
 
 class IOModel(nn.Module):

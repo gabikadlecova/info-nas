@@ -21,9 +21,11 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 
     dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
-    hashes, inputs, outputs = dataset
+    hashes, inputs, outputs, whole_dataset = dataset
+    use_reference = len(inputs.shape) == 1
 
-    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'n_labeled': len(networks)}
+    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'dataset': whole_dataset,
+            'use_reference': use_reference, 'n_labeled': len(networks)}
     torch.save(data, save_path)
 
     return data
@@ -32,6 +34,7 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,
                       loss=None, device=None):
     _, _, valid_loader, validation_size, _, _ = dataset
+    loaded_dataset = list(valid_loader)
 
     net_hashes = []
     in_list = []
@@ -39,7 +42,7 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
 
     # get the io info per network
     for net_hash, network, _ in networks:
-        net_res = _get_net_outputs(network, valid_loader, nth_input, nth_output, loss=loss, num_data=validation_size,
+        net_res = _get_net_outputs(network, loaded_dataset, nth_input, nth_output, loss=loss, num_data=validation_size,
                                    device=device)
         in_data, out_data = net_res["in_data"], net_res["out_data"]
         assert in_data.shape[0] == out_data.shape[0]
@@ -61,7 +64,7 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
     state = np.random.RandomState(seed=random_state) if random_state is not None else np.random
     state.shuffle(indices)
 
-    return net_hashes[indices], in_list[indices], out_list[indices]
+    return net_hashes[indices], in_list[indices], out_list[indices], loaded_dataset
 
 
 def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=None, num_data=None, device=None):
@@ -82,10 +85,13 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=No
     in_data = []
     out_data = []
 
+    batch_size = None
     with torch.no_grad():
         for batch_idx, (inputs, targets) in enumerate(data_loader):
-            inputs, targets = inputs.to(device), targets.to(device)
+            if batch_size is None:
+                batch_size = len(inputs)
 
+            inputs, targets = inputs.to(device), targets.to(device)
             outputs = net(inputs)
 
             curr_loss = loss(outputs, targets)
@@ -95,7 +101,13 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=No
 
             in_list, out_list = net.get_cell_outputs(inputs, return_inputs=True)
 
-            in_data.append(in_list[nth_input].to('cpu'))
+            # if first input (original image), save example index instead
+            if nth_input != 0:
+                save_input = in_list[nth_input].to('cpu')
+            else:
+                save_input = torch.arange(len(inputs)) + batch_idx * batch_size
+
+            in_data.append(save_input)
             out_data.append(out_list[nth_output].to('cpu'))
 
             if num_data is None:

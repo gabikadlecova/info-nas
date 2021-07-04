@@ -16,7 +16,7 @@ local_dataset_cfg = {
     },
     'io': {
         'nth_input': 0,
-        'nth_output': -2,
+        'nth_output': -3,
         'loss': None
     }
 }

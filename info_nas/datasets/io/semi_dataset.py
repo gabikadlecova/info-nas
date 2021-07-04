@@ -28,7 +28,11 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0
 
 def labeled_network_dataset(labeled_io, labeled_net):
     adj, ops = labeled_net
-    return NetworkDataset(adj, ops, labeled_io['inputs'], labeled_io['outputs'])
+
+    # indexing in the original input (io dataset uses input id 0)
+    ref_dataset = labeled_io['dataset'] if labeled_io['use_reference'] else None
+
+    return NetworkDataset(adj, ops, labeled_io['inputs'], labeled_io['outputs'], reference_dataset=ref_dataset)
 
 
 def unlabeled_network_dataset(dataset):
@@ -38,8 +42,11 @@ def unlabeled_network_dataset(dataset):
 
 # TODO if larger dataset, load from file (IterableDataset - only for io, unlabeled are short enough)
 class NetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, *args):
+    def __init__(self, *args, reference_dataset=None, reference_id=2):
         super().__init__()
+
+        self.reference_dataset = reference_dataset
+        self.reference_id = reference_id
 
         self.data = args
 
@@ -50,7 +57,12 @@ class NetworkDataset(torch.utils.data.Dataset):
         return self.data_len
 
     def __getitem__(self, index):
-        return tuple(a[index] for a in self.data)
+        item = [a[index] for a in self.data]
+
+        if self.reference_dataset is not None:
+            item[self.reference_id] = self.reference_dataset[item[self.reference_id]]
+
+        return item
 
 
 class SemiSupervisedDataset:

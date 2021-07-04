@@ -15,12 +15,12 @@ from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 
 
 def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json',
-                                   dataset='../data/cifar/', seed=1, percent_labeled=0.01,
+                                   dataset='../data/cifar/', seed=1,
                                    train_labeled_path='../data/train_labeled.pt',
                                    valid_labeled_path='../data/valid_labeled.pt',
                                    train_pretrained='../data/train_checkpoints/',
                                    valid_pretrained='../data/valid_checkpoints/',
-                                   raise_if_not_pretrained=True, device=None, config=None):
+                                   device=None, config=None):
     # creates/loads both the original dataset and the labeled io dataset
 
     if config is None:
@@ -29,19 +29,15 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
                                              **config['nb_dataset'])
 
-    train_hashes, valid_hashes = split_to_labeled(nb_dataset, seed=seed, percent_labeled=percent_labeled)
-
     print('Processing labeled nets for the training set...')
     # networks from train set
-    train_labeled = _create_or_load_labeled(nasbench, dataset, train_pretrained, train_labeled_path, train_hashes,
-                                            seed=seed, device=device, config=config,
-                                            raise_if_not_pretrained=raise_if_not_pretrained)
+    train_labeled = _create_or_load_labeled(nasbench, dataset, train_pretrained, train_labeled_path,
+                                            seed=seed, device=device, config=config)
 
     print('Processing labeled nets for the validation set...')
     # networks from valid set
-    valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path, valid_hashes,
-                                            seed=seed, device=device, config=config,
-                                            raise_if_not_pretrained=raise_if_not_pretrained)
+    valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path,
+                                            seed=seed, device=device, config=config)
 
     # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
     train_data = _ops_adj_from_hashes(train_labeled['net_hashes'], nb_dataset["train"])
@@ -72,6 +68,7 @@ def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
     return train_hashes_chosen, valid_hashes_chosen
 
 
+# TODO tohle na odebrání z val setu potentially
 def _check_hashes(hashes, reference):
     for h in hashes:
         if h not in reference:
@@ -79,14 +76,7 @@ def _check_hashes(hashes, reference):
                              f" used for dataset splits).")
 
 
-def _load_labeled(net_dir, reference_hashes, device=None):
-    dataset = load_io_dataset(net_dir, device=device)
-    _check_hashes(dataset['net_hashes'], reference_hashes)
-
-    return dataset
-
-
-def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, **kwargs):
+def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, val_batch_size=None, **kwargs):
     if save_path is not None and os.path.exists(save_path):
         print(f"Loading nasbench dataset (arch2vec) from {save_path}")
         dataset = save_path
@@ -94,41 +84,31 @@ def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=Non
         print(f"Generating nasbench dataset (arch2vec){'.' if save_path is None else f', save path = {save_path}.'}")
         dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
 
-    return get_nasbench_datasets(dataset, batch_size=batch_size, seed=seed, **kwargs)
+    return get_nasbench_datasets(dataset, batch_size=batch_size, val_batch_size=None, seed=seed, **kwargs)
 
 
-def _pretrain_if_needed(pretrained_path, nasbench, dataset, net_hashes, device=None, raise_if_not_pretrained=True,
-                        **kwargs):
+def _check_pretrained(pretrained_path):
     err_loading = f"No pretrained networks found in the specified path - {pretrained_path}."
 
     if not os.path.exists(pretrained_path):
-        if raise_if_not_pretrained:
-            raise ValueError(err_loading)
-
-        os.mkdir(pretrained_path)
+        raise ValueError(err_loading)
 
     if not len(os.listdir(pretrained_path)):
-        if raise_if_not_pretrained:
-            raise ValueError(err_loading)
-
-        pretrain_network_dataset(net_hashes, nasbench, dataset, device=device, dir_path=pretrained_path,
-                                 **kwargs)
+        raise ValueError(err_loading)
 
 
-def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, hashes, seed=1, device=None, config=None,
-                            raise_if_not_pretrained=True):
+def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, seed=1, device=None, config=None):
     if config is None:
         config = local_dataset_cfg
 
     if os.path.exists(labeled_path):
         print(f'Loading labeled dataset from {labeled_path}.')
-        labeled = _load_labeled(labeled_path, hashes, device=device)
+        labeled = load_io_dataset(labeled_path)
     else:
         if isinstance(dataset, str):
             dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
 
-        _pretrain_if_needed(pretrained_path, nasbench, dataset, hashes, device=device, **config['pretrain'],
-                            raise_if_not_pretrained=raise_if_not_pretrained)
+        _check_pretrained(pretrained_path)
 
         print(f'Creating labeled dataset from pretrained networks (saving to {labeled_path}).')
         labeled = dataset_from_pretrained(pretrained_path, nasbench, dataset, labeled_path,
