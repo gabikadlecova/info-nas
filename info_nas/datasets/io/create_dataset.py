@@ -21,11 +21,11 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 
     dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
-    hashes, inputs, outputs, whole_dataset = dataset
+    hashes, inputs, outputs, whole_dataset, whole_labels = dataset
     use_reference = len(inputs.shape) == 1
 
     data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'dataset': whole_dataset,
-            'use_reference': use_reference, 'n_labeled': len(networks)}
+            'labels': whole_labels, 'use_reference': use_reference, 'n_labeled': len(networks)}
     torch.save(data, save_path)
 
     return data
@@ -34,7 +34,8 @@ def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, ran
 def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,
                       loss=None, device=None):
     _, _, valid_loader, validation_size, _, _ = dataset
-    loaded_dataset = list(valid_loader)
+
+    loaded_dataset = [b for b in valid_loader]
 
     net_hashes = []
     in_list = []
@@ -58,13 +59,19 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
     in_list = torch.cat(in_list)
     out_list = torch.cat(out_list)
 
+    # concat batched dataset
+    loaded_inputs, loaded_targets = [], []
+    for i, t in loaded_dataset:
+        loaded_inputs.append(i)
+        loaded_targets.append(t)
+
     assert len(net_hashes) == len(in_list) and len(net_hashes) == len(out_list)
 
     indices = np.arange(len(net_hashes))
     state = np.random.RandomState(seed=random_state) if random_state is not None else np.random
     state.shuffle(indices)
 
-    return net_hashes[indices], in_list[indices], out_list[indices], loaded_dataset
+    return net_hashes[indices], in_list[indices], out_list[indices], torch.cat(loaded_inputs), torch.cat(loaded_targets)
 
 
 def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=None, num_data=None, device=None):

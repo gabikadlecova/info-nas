@@ -7,6 +7,7 @@ __pycache__/
 data/*
 
 */checkpoints/*
+*.pt
 
 # C extensions
 *.so

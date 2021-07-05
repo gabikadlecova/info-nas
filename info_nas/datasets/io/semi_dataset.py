@@ -30,7 +30,7 @@ def labeled_network_dataset(labeled_io, labeled_net):
     adj, ops = labeled_net
 
     # indexing in the original input (io dataset uses input id 0)
-    ref_dataset = labeled_io['dataset'] if labeled_io['use_reference'] else None
+    ref_dataset = (labeled_io['dataset'], labeled_io['labels']) if labeled_io['use_reference'] else None
 
     return NetworkDataset(adj, ops, labeled_io['inputs'], labeled_io['outputs'], reference_dataset=ref_dataset)
 
@@ -45,7 +45,8 @@ class NetworkDataset(torch.utils.data.Dataset):
     def __init__(self, *args, reference_dataset=None, reference_id=2):
         super().__init__()
 
-        self.reference_dataset = reference_dataset
+        self.reference_dataset = reference_dataset[0] if reference_dataset is not None else None
+        self.reference_labels = reference_dataset[1] if reference_dataset is not None else None
         self.reference_id = reference_id
 
         self.data = args
@@ -60,7 +61,10 @@ class NetworkDataset(torch.utils.data.Dataset):
         item = [a[index] for a in self.data]
 
         if self.reference_dataset is not None:
-            item[self.reference_id] = self.reference_dataset[item[self.reference_id]]
+            data = self.reference_dataset[item[self.reference_id]]
+            label = self.reference_labels[item[self.reference_id]]
+            item[self.reference_id] = data
+            item.append(label)
 
         return item
 

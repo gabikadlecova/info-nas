@@ -277,7 +277,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
 
                 n_unlabeled_batches += 1
 
-            elif len(batch) == 4:
+            elif len(batch) == 5:
                 extended_model = model_labeled
                 loss_list = loss_lists_epoch['labeled']
                 Z_list = Z['labeled']
