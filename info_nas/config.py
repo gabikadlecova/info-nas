@@ -31,8 +31,16 @@ local_model_cfg = {
         'use_3x3_for_output': False
     },
     'loss': 'MSE',
-    'checkpoint': 5
+    'checkpoint': 5,
+    'dataset_config': {
+        'k': 1000,
+        'n_workers': 4,
+        'n_valid_workers': 4
+    },
+    'arch2vec_config': 4
 }
+
+# TODO extend the config with missing fields (default settings)
 
 
 def load_json_cfg(config_path):

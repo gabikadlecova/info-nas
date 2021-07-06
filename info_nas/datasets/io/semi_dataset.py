@@ -21,7 +21,7 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0
     valid_labeled_dataset = torch.utils.data.DataLoader(valid_labeled, batch_size=val_batch_size,
                                                         num_workers=math.floor(n_valid_workers / 2), **kwargs)
     valid_unlabeled_dataset = torch.utils.data.DataLoader(valid_unlabeled, batch_size=val_batch_size,
-                                                          num_workers=math.floor(n_valid_workers / 2), **kwargs)
+                                                          num_workers=math.ceil(n_valid_workers / 2), **kwargs)
 
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 

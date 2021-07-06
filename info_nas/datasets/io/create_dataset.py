@@ -18,8 +18,7 @@ def _list_net_dir(net_dir: str):
     return [os.path.join(net_dir, n) for n in net_paths]
 
 
-def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, random_state=1,
-                            device=None, **kwargs):
+def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, device=None, **kwargs):
     # pretrained networks in a folder
     if isinstance(net_dir, str):
         net_paths = _list_net_dir(net_dir)
@@ -27,18 +26,19 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
         # join multiple folders
         net_paths = [p for nd in net_dir for p in _list_net_dir(nd)]
 
+    print(f'Creating dataset from {len(net_paths)} pretrained networks.')
+
     networks = (load_trained_net(net_path, nasbench, device=device) for net_path in net_paths)
 
-    data = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
+    data = create_io_dataset(networks, dataset, device=device, **kwargs)
     torch.save(data, save_path)
 
     return data
 
 
-def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, random_state=1,
-                      loss=None, device=None):
-    _, _, valid_loader, validation_size, _, _ = dataset
+def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20):
 
+    _, _, valid_loader, validation_size, _, _ = dataset
     loaded_dataset = [b for b in valid_loader]
 
     net_repo = {}
@@ -48,7 +48,10 @@ def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, random_stat
     out_list = []
 
     # get the io info per network
-    for net_hash, network, _ in networks:
+    for i, (net_hash, network, _) in enumerate(networks):
+        if (i % 20) == 0:
+            print(f"Processing network {i}: {net_hash}")
+
         net_res = _get_net_outputs(network, loaded_dataset, nth_input, nth_output, loss=loss, num_data=validation_size,
                                    device=device)
         in_data, out_data = net_res["in_data"], net_res["out_data"]
@@ -64,8 +67,8 @@ def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, random_stat
         out_bias = network.classifier.bias
 
         net_repo[net_hash] = {
-            'weights': out_weight,
-            'bias': out_bias
+            'weights': out_weight.detach().cpu(),
+            'bias': out_bias.detach().cpu()
         }
 
     return _process_output_data(net_hashes, in_list, out_list, loaded_dataset, net_repo)
@@ -81,6 +84,9 @@ def _process_output_data(net_hashes, in_list, out_list, loaded_dataset, net_repo
     for i, t in loaded_dataset:
         loaded_inputs.append(i)
         loaded_targets.append(t)
+
+    loaded_inputs = torch.cat(loaded_inputs)
+    loaded_targets = torch.cat(loaded_targets)
 
     assert len(net_hashes) == len(in_list) and len(net_hashes) == len(out_list)
 

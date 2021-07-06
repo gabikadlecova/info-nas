@@ -31,8 +31,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     train_pretrained = _split_pretrain_paths(train_pretrained)
     valid_pretrained = _split_pretrain_paths(valid_pretrained)
 
-    nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
-                                             **config['nb_dataset'])
+    nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
 
     print('Processing labeled nets for the training set...')
     # networks from train set
@@ -79,7 +78,7 @@ def _check_hashes(hashes, reference):
                              f" used for dataset splits).")
 
 
-def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=None, val_batch_size=None, **kwargs):
+def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, **kwargs):
     if save_path is not None and os.path.exists(save_path):
         print(f"Loading nasbench dataset (arch2vec) from {save_path}")
         dataset = save_path
@@ -87,7 +86,7 @@ def generate_or_load_nb_dataset(nasbench, save_path=None, seed=1, batch_size=Non
         print(f"Generating nasbench dataset (arch2vec){'.' if save_path is None else f', save path = {save_path}.'}")
         dataset = gen_json_file(nasbench=nasbench, save_path=save_path)
 
-    return get_nasbench_datasets(dataset, batch_size=batch_size, val_batch_size=None, seed=seed, **kwargs)
+    return get_nasbench_datasets(dataset, batch_size=None, val_batch_size=None, seed=seed, **kwargs)
 
 
 def _check_pretrained(pretrained_path):
@@ -116,8 +115,8 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, s
             _check_pretrained(path)
 
         print(f'Creating labeled dataset from pretrained networks (saving to {labeled_path}).')
-        labeled = dataset_from_pretrained(pretrained_paths, nasbench, dataset, labeled_path,
-                                          random_state=seed, device=device, **config['io'])
+        labeled = dataset_from_pretrained(pretrained_paths, nasbench, dataset, labeled_path, device=device,
+                                          **config['io'])
 
     return labeled
 

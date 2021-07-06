@@ -43,13 +43,13 @@ def _forward_batch(model, adj, ops, inputs=None):
 
 
 def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_history, outputs=None):
-    ops_recon, adj_recon, mu, logvar, = model_out[:4]
+    ops_recon, adj_recon, mu, logvar = model_out[:4]
 
     adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
     adj, ops = prep_reverse(adj, ops)
 
     if outputs is not None:
-        assert len(model_out) == 6
+        assert len(model_out) == 6  # TODO could differ
         outs_recon = model_out[-1]
 
         labeled_out = loss_labeled(outs_recon, outputs)
@@ -172,15 +172,15 @@ def _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss
     optimizer.step()
 
 
-def _init_config_and_seeds(config, model_config, seed, torch_deterministic, cudnn_deterministic):
-    # arch2vec config
-    config = configs[config]
-
+def _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_deterministic):
     # io model config
     if model_config is None:
         model_config = local_model_cfg
     elif isinstance(model_config, str):
         model_config = load_json_cfg(model_config)
+
+    # arch2vec config
+    config = configs[model_config['arch2vec_config']]
 
     if torch_deterministic:
         torch.use_deterministic_algorithms(True)
@@ -197,29 +197,29 @@ def _init_config_and_seeds(config, model_config, seed, torch_deterministic, cudn
 
 
 def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=False, model_config=None, device=None,
-          batch_size=32, k=1, n_workers=0, n_val_workers=0, seed=1, epochs=8, config=4, print_frequency=1000,
-          torch_deterministic=False, cudnn_deterministic=False, writer=None, verbose=2):
+          batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000, batch_len_labeled=4,
+          torch_deterministic=False, cudnn_deterministic=False):
 
-    config, model_config = _init_config_and_seeds(config, model_config, seed, torch_deterministic, cudnn_deterministic)
+    config, model_config = _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_deterministic)
 
     # TODO finish writer
     if writer is not None:
         writer = SummaryWriter(writer)
 
     # init dataset
-    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, k=k,
-                                                                             batch_size=batch_size, n_workers=n_workers,
-                                                                             n_valid_workers=n_val_workers)
+    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, batch_size=batch_size,
+                                                                             **model_config['dataset_config'])
     dataset_len = len(train_dataset)
 
     # init models
-    if not labeled['train_io']['use_reference']:
-        in_channels = labeled['train_io']['inputs'].shape[1]
+    if not labeled['train']['use_reference']:
+        in_channels = labeled['train']['inputs'].shape[1]
     else:
-        in_channels = labeled['train_io']['dataset'].shape[1]
+        in_channels = labeled['train']['dataset'].shape[1]
 
-    out_channels = labeled['train_io']['outputs'].shape[1]
+    out_channels = labeled['train']['outputs'].shape[1]
 
+    # init models
     model, optimizer = get_arch2vec_model(device=device)
     model_labeled = _initialize_labeled_model(model, in_channels, out_channels,
                                               device=device, model_config=model_config)
@@ -260,10 +260,6 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
         model_labeled.train()
 
         n_labeled_batches, n_unlabeled_batches = 0, 0
-
-        #TODO metrics dict
-        #TODO
-
         loss_lists_epoch = init_stats_dict()
         Z = init_stats_dict(use_loss_list=False)
 
@@ -277,7 +273,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
 
                 n_unlabeled_batches += 1
 
-            elif len(batch) == 5:
+            elif len(batch) == batch_len_labeled:
                 extended_model = model_labeled
                 loss_list = loss_lists_epoch['labeled']
                 Z_list = Z['labeled']
@@ -285,7 +281,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
 
                 n_labeled_batches += 1
             else:
-                raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or 4.")
+                raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or "
+                                 f"{batch_len_labeled}.")
 
             # train models
             _train_on_batch(extended_model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled,
@@ -310,6 +307,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
                               model_config['model_class'], model_config['model_kwargs'])
 
             # TODO checkpoint metrics
+            #  - save to pandas
 
         _eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
                     device, nasbench, valid_unlabeled, config, verbose=verbose)
@@ -317,18 +315,4 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
         # TODO tensorboard?
 
     # TODO lepší zaznamenání výsledků
-    return model_labeled, metrics_total
-
-
-# TODO pretrain model MOJE:
-#  - load nasbench, get nb dataset, get MY io dataset (x)
-#  - get model and optimizer (x) ; get MY model (x) and MY loss (x)
-#  - for epoch in range(epochs): (x)
-#      - for batch in batches: (x)
-#         - ops, adj to cuda, PREPRO (x)
-#         - forward and backward (x)
-#         - (take care of my loss) (x)
-#      - validity, uniqueness, val_accuracy (x)
-#      - LOSS TOTAL, CHECKPOINT (x) (x)
-
-
+    return model_labeled, metrics_total, loss_lists_total
