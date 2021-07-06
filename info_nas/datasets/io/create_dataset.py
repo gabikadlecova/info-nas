@@ -24,7 +24,7 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
         net_paths = _list_net_dir(net_dir)
     else:
         # join multiple folders
-        net_paths = [p for nd in net_dir for p in _list_net_dir(nd)]
+        net_paths = [p for nd in net_dir for p in _list_net_dir(nd) if p.endswith('.tar')]
 
     print(f'Creating dataset from {len(net_paths)} pretrained networks.')
 
@@ -49,7 +49,7 @@ def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, 
 
     # get the io info per network
     for i, (net_hash, network, _) in enumerate(networks):
-        if (i % 20) == 0:
+        if (i % print_frequency) == 0:
             print(f"Processing network {i}: {net_hash}")
 
         net_res = _get_net_outputs(network, loaded_dataset, nth_input, nth_output, loss=loss, num_data=validation_size,

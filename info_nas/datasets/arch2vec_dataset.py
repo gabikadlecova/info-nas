@@ -1,4 +1,5 @@
 import math
+from typing import List, Union
 
 import numpy as np
 import os
@@ -12,8 +13,11 @@ from arch2vec.preprocessing.gen_json import gen_json_file
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 
 
-def _split_pretrain_paths(paths: str):
-    return paths.split(',')
+def _split_pretrain_paths(paths: Union[str, List[str]]):
+    if isinstance(paths, str):
+        return paths.split(',')
+
+    return paths
 
 
 def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json',
