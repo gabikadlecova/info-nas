@@ -26,21 +26,21 @@ class IOModel(nn.Module):
 
 
 class ConcatConvModel(IOModel):
-    def __init__(self, vae_model, input_channels, output_channels, z_hidden=16, n_steps=2, n_convs=2,
-                 use_3x3_for_z=False, use_3x3_for_output=False):
+    def __init__(self, vae_model, input_channels, output_channels, start_channels=128, z_hidden=16,
+                 n_steps=2, n_convs=2, dense_output=True, use_3x3_for_z=False, use_3x3_for_output=False):
 
         super().__init__(vae_model)
 
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
 
-        channels = input_channels
+        channels = start_channels
         conv_list = []
 
         # handle concatenated zs
         if use_3x3_for_z:
-            conv_list.append(ConvBnRelu(channels + z_hidden, channels, kernel_size=3, padding=1))
+            conv_list.append(ConvBnRelu(input_channels + z_hidden, channels, kernel_size=3, padding=1))
         else:
-            conv_list.append(ConvBnRelu(channels + z_hidden, channels))
+            conv_list.append(ConvBnRelu(input_channels + z_hidden, channels))
 
         for _ in range(n_steps):
             for _ in range(n_convs - 1):
@@ -51,13 +51,19 @@ class ConcatConvModel(IOModel):
             conv_list.append(ConvBnRelu(channels, next_channels, kernel_size=3, stride=2, padding=1))
             channels = next_channels
 
-        # output info
-        if use_3x3_for_output:
-            conv_list.append(nn.Conv2d(channels, output_channels, 3, padding=1))
-        else:
-            conv_list.append(nn.Conv2d(channels, output_channels, 1, padding=0))
-
         self.conv_list = nn.Sequential(*conv_list)
+
+        self.dense_output = dense_output
+        # output info
+        if dense_output:
+            self.last_layer = nn.Linear(channels, output_channels)
+        else:
+            if use_3x3_for_output:
+                self.last_layer = nn.Conv2d(channels, output_channels, 3, padding=1)
+            else:
+                self.last_layer = nn.Conv2d(channels, output_channels, 1, padding=0)
+
+        # TODO
         self.activation = nn.Sigmoid()
 
     def inputs_forward(self, z, inputs):
@@ -66,9 +72,14 @@ class ConcatConvModel(IOModel):
 
         # concat as a separate channel
         z = z.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, inputs.shape[2], inputs.shape[3])
-        in_and_z = torch.cat([inputs, z], dim=1)
+        z = torch.cat([inputs, z], dim=1)
 
-        return self.activation(self.conv_list(in_and_z))
+        z = self.conv_list(z)
+
+        if self.dense_output:
+            z = torch.mean(z, (2, 3))
+
+        return self.activation(self.last_layer(z))
 
 
 model_dict = {

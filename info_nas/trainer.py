@@ -196,9 +196,9 @@ def _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_determ
     return config, model_config
 
 
-def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=False, model_config=None, device=None,
-          batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000, batch_len_labeled=4,
-          torch_deterministic=False, cudnn_deterministic=False):
+def train(labeled, unlabeled, nasbench, checkpoint_path, dataset_transforms=None, use_reference_model=False,
+          model_config=None, device=None, batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000,
+          batch_len_labeled=4, torch_deterministic=False, cudnn_deterministic=False):
 
     config, model_config = _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_deterministic)
 
@@ -208,6 +208,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, use_reference_model=Fal
 
     # init dataset
     train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, batch_size=batch_size,
+                                                                             labeled_transforms=dataset_transforms,
                                                                              **model_config['dataset_config'])
     dataset_len = len(train_dataset)
 

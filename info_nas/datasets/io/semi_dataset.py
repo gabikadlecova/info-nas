@@ -5,18 +5,19 @@ import torch
 import torch.utils.data
 
 
-def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0, shuffle=True, val_batch_size=100,
-                             n_valid_workers=0, **kwargs):
+def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_size=32, n_workers=0, shuffle=True,
+                             val_batch_size=100, n_valid_workers=0, labeled_transforms=None, **kwargs):
 
-    train_labeled = labeled_network_dataset(labeled['train'])
-    valid_labeled = labeled_network_dataset(labeled['valid'])
+    train_labeled = labeled_network_dataset(labeled['train'], transforms=labeled_transforms)
+    valid_labeled = labeled_network_dataset(labeled['valid'], transforms=labeled_transforms)
 
     train_unlabeled = unlabeled_network_dataset(unlabeled['train'])
     valid_unlabeled = unlabeled_network_dataset(unlabeled['val'])
 
     n_labeled = len(labeled['train']['net_repo'])
     train_dataset = SemiSupervisedDataset(train_labeled, train_unlabeled, n_labeled, k=k, batch_size=batch_size,
-                                          n_workers=n_workers, shuffle=shuffle, **kwargs)
+                                          repeat_unlabeled=repeat_unlabeled, n_workers=n_workers,
+                                          shuffle=shuffle, **kwargs)
 
     valid_labeled_dataset = torch.utils.data.DataLoader(valid_labeled, batch_size=val_batch_size,
                                                         num_workers=math.floor(n_valid_workers / 2), **kwargs)
@@ -26,14 +27,14 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 
 
-def labeled_network_dataset(labeled):
+def labeled_network_dataset(labeled, transforms=None):
     net_repo = labeled['net_repo']
 
     # indexing in the original input (io dataset uses input id 0)
     ref_dataset = (labeled['dataset'], labeled['labels']) if labeled['use_reference'] else None
 
     return ReferenceNetworkDataset(labeled['net_hashes'], labeled['inputs'], labeled['outputs'],
-                                   reference_dataset=ref_dataset, net_repo=net_repo)
+                                   reference_dataset=ref_dataset, net_repo=net_repo, transform=transforms)
 
 
 def unlabeled_network_dataset(dataset):
@@ -60,7 +61,7 @@ class NetworkDataset(torch.utils.data.Dataset):
 
 
 class ReferenceNetworkDataset(NetworkDataset):
-    def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0):
+    def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0, transform=None):
         super().__init__(*args)
 
         self.reference_dataset = reference_dataset[0] if reference_dataset is not None else None
@@ -69,6 +70,8 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         self.net_repo = net_repo
         self.net_id = net_id
+
+        self.transform = transform
 
     def get_batch_names(self):
         """
@@ -93,12 +96,14 @@ class ReferenceNetworkDataset(NetworkDataset):
     def __getitem__(self, index):
         item = super().__getitem__(index)
 
+        # get inputs from the reference dataset
         if self.reference_dataset is not None:
             data = self.reference_dataset[item[self.reference_id]]
             label = self.reference_labels[item[self.reference_id]]
             item[self.reference_id] = data
             item.append(label)
 
+        # get network metadata
         if self.net_repo is not None:
             hash = item[self.net_id]
             net_entry = self.net_repo[hash]
@@ -111,11 +116,15 @@ class ReferenceNetworkDataset(NetworkDataset):
             item.append(net_entry['weights'])
             item.append(net_entry['bias'])
 
+        if self.transform is not None:
+            item = self.transform(item)
+
         return item
 
 
 class SemiSupervisedDataset:
-    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, batch_size=32, n_workers=0, shuffle=True, **kwargs):
+    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, batch_size=32, n_workers=0, shuffle=True,
+                 repeat_unlabeled=1, **kwargs):
         self.n, self.n_labeled, self.n_unlabeled = 0, 0, 0
 
         # datasets and their iterators
@@ -128,11 +137,11 @@ class SemiSupervisedDataset:
 
         # max values for iteration
         self.max_labeled = len(self.labeled)
-        self.max_unlabeled = len(self.unlabeled)
+        self.max_unlabeled = len(self.unlabeled) * repeat_unlabeled
         self.max_n = self.max_labeled + self.max_unlabeled
 
         # values that determine when to draw unlabeled vs labeled batches
-        n_unlabeled_nets = self.max_unlabeled
+        n_unlabeled_nets = len(self.unlabeled)
         n_labeled_orig = n_labeled_nets
         n_labeled_nets = n_labeled_nets // batch_size
 
@@ -165,9 +174,23 @@ class SemiSupervisedDataset:
                 return next(self.labeled_iter)
             else:
                 self.n_unlabeled += 1
-                return next(self.unlabeled_iter)
+                return self.next_unlabeled()
         else:
             raise StopIteration()
+
+    def next_unlabeled(self):
+        """
+        Return the next batch of the unlabeled dataset, start the iteration over if the end is reached.
+
+        Returns:
+            Next batch from the unlabeled dataset.
+        """
+        try:
+            return next(self.unlabeled_iter)
+        except StopIteration:
+            self.unlabeled_iter = iter(self.unlabeled)
+            return next(self.unlabeled_iter)
+
 
     def should_choose_labeled(self):
         """

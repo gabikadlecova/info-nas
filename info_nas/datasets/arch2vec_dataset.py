@@ -22,7 +22,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                    valid_labeled_path='../data/valid_labeled.pt',
                                    train_pretrained='../data/train_checkpoints/',
                                    valid_pretrained='../data/valid_checkpoints/',
-                                   device=None, config=None):
+                                   remove_labeled=True, device=None, config=None):
     # creates/loads both the original dataset and the labeled io dataset
 
     if config is None:
@@ -43,9 +43,10 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path,
                                             seed=seed, device=device, config=config)
 
+    # remove labeled nets from unlabeled dataset, get network metadata
     # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
-    _ops_adj_to_repo(train_labeled, nb_dataset["train"])
-    _ops_adj_to_repo(valid_labeled, nb_dataset["val"])
+    nb_dataset["train"] = _sync_labeled_unlabeled(train_labeled, nb_dataset["train"], remove_labeled=remove_labeled)
+    nb_dataset["val"] = _sync_labeled_unlabeled(valid_labeled, nb_dataset["val"], remove_labeled=remove_labeled)
 
     labeled_dataset = {
         "train": train_labeled,
@@ -121,11 +122,19 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, s
     return labeled
 
 
-def _ops_adj_to_repo(dataset, nb_dataset):
+def _sync_labeled_unlabeled(dataset, nb_dataset, remove_labeled=True):
     net_repo = dataset['net_repo']
 
+    new_nb = [[] for _ in range(len(nb_dataset))]
     # find corresponding network graph in nb dataset
     for i_batch, item in enumerate(nb_dataset[0]):
         if item in net_repo:
             net_repo[item]['adj'] = nb_dataset[1][i_batch]
             net_repo[item]['ops'] = nb_dataset[2][i_batch]
+            continue
+
+        if remove_labeled:
+            for i in range(len(nb_dataset)):
+                new_nb[i].append(nb_dataset[i][i_batch])
+
+    return new_nb if remove_labeled else nb_dataset

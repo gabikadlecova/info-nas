@@ -16,7 +16,7 @@ local_dataset_cfg = {
     },
     'io': {
         'nth_input': 0,
-        'nth_output': -3,
+        'nth_output': -2,
         'loss': None
     }
 }
@@ -33,7 +33,8 @@ local_model_cfg = {
     'loss': 'MSE',
     'checkpoint': 5,
     'dataset_config': {
-        'k': 1000,
+        'k': 20,
+        'repeat_unlabeled': 1,
         'n_workers': 4,
         'n_valid_workers': 4
     },
