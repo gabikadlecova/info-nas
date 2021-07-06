@@ -9,9 +9,11 @@ from info_nas.config import local_dataset_cfg
 from info_nas.datasets.io.create_dataset import load_io_dataset, dataset_from_pretrained
 from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
 from arch2vec.preprocessing.gen_json import gen_json_file
-
-from info_nas.datasets.networks.pretrained import pretrain_network_dataset
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
+
+
+def _split_pretrain_paths(paths: str):
+    return paths.split(',')
 
 
 def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json',
@@ -25,6 +27,9 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
 
     if config is None:
         config = local_dataset_cfg
+
+    train_pretrained = _split_pretrain_paths(train_pretrained)
+    valid_pretrained = _split_pretrain_paths(valid_pretrained)
 
     nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, batch_size=None,
                                              **config['nb_dataset'])
@@ -40,14 +45,12 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                             seed=seed, device=device, config=config)
 
     # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
-    train_data = _ops_adj_from_hashes(train_labeled['net_hashes'], nb_dataset["train"])
-    valid_data = _ops_adj_from_hashes(valid_labeled['net_hashes'], nb_dataset["val"])
+    _ops_adj_to_repo(train_labeled, nb_dataset["train"])
+    _ops_adj_to_repo(valid_labeled, nb_dataset["val"])
 
     labeled_dataset = {
-        "train_io": train_labeled,
-        "train_net": train_data,
-        "valid_io": valid_labeled,
-        "valid_net": valid_data
+        "train": train_labeled,
+        "valid": valid_labeled
     }
 
     return labeled_dataset, nb_dataset
@@ -97,7 +100,7 @@ def _check_pretrained(pretrained_path):
         raise ValueError(err_loading)
 
 
-def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, seed=1, device=None, config=None):
+def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, seed=1, device=None, config=None):
     if config is None:
         config = local_dataset_cfg
 
@@ -108,30 +111,22 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, se
         if isinstance(dataset, str):
             dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
 
-        _check_pretrained(pretrained_path)
+        # check all folders for pretrain files
+        for path in pretrained_paths:
+            _check_pretrained(path)
 
         print(f'Creating labeled dataset from pretrained networks (saving to {labeled_path}).')
-        labeled = dataset_from_pretrained(pretrained_path, nasbench, dataset, labeled_path,
+        labeled = dataset_from_pretrained(pretrained_paths, nasbench, dataset, labeled_path,
                                           random_state=seed, device=device, **config['io'])
 
     return labeled
 
 
-def _ops_adj_from_hashes(net_hashes, nb_dataset):
-    net_dict = {}
+def _ops_adj_to_repo(dataset, nb_dataset):
+    net_repo = dataset['net_repo']
 
-    # find data in batches
+    # find corresponding network graph in nb dataset
     for i_batch, item in enumerate(nb_dataset[0]):
-        if item in net_hashes:
-            net_dict[item] = nb_dataset[1][i_batch], nb_dataset[2][i_batch]
-
-    # return dataset in the same order as hashes
-    ops = []
-    adj = []
-    for h in net_hashes:
-        data = net_dict[h]
-
-        adj.append(data[0])
-        ops.append(data[1])
-
-    return torch.stack(adj), torch.stack(ops)
+        if item in net_repo:
+            net_repo[item]['adj'] = nb_dataset[1][i_batch]
+            net_repo[item]['ops'] = nb_dataset[2][i_batch]

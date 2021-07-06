@@ -8,13 +8,13 @@ import torch.utils.data
 def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0, shuffle=True, val_batch_size=100,
                              n_valid_workers=0, **kwargs):
 
-    train_labeled = labeled_network_dataset(labeled['train_io'], labeled['train_net'])
-    valid_labeled = labeled_network_dataset(labeled['valid_io'], labeled['valid_net'])
+    train_labeled = labeled_network_dataset(labeled['train'])
+    valid_labeled = labeled_network_dataset(labeled['valid'])
 
     train_unlabeled = unlabeled_network_dataset(unlabeled['train'])
     valid_unlabeled = unlabeled_network_dataset(unlabeled['val'])
 
-    n_labeled = labeled['train_io']['n_labeled']
+    n_labeled = len(labeled['train']['net_repo'])
     train_dataset = SemiSupervisedDataset(train_labeled, train_unlabeled, n_labeled, k=k, batch_size=batch_size,
                                           n_workers=n_workers, shuffle=shuffle, **kwargs)
 
@@ -26,13 +26,14 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, batch_size=32, n_workers=0
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 
 
-def labeled_network_dataset(labeled_io, labeled_net):
-    adj, ops = labeled_net
+def labeled_network_dataset(labeled):
+    net_repo = labeled['net_repo']
 
     # indexing in the original input (io dataset uses input id 0)
-    ref_dataset = (labeled_io['dataset'], labeled_io['labels']) if labeled_io['use_reference'] else None
+    ref_dataset = (labeled['dataset'], labeled['labels']) if labeled['use_reference'] else None
 
-    return NetworkDataset(adj, ops, labeled_io['inputs'], labeled_io['outputs'], reference_dataset=ref_dataset)
+    return ReferenceNetworkDataset(labeled['net_hashes'], labeled['inputs'], labeled['outputs'],
+                                   reference_dataset=ref_dataset, net_repo=net_repo)
 
 
 def unlabeled_network_dataset(dataset):
@@ -42,12 +43,8 @@ def unlabeled_network_dataset(dataset):
 
 # TODO if larger dataset, load from file (IterableDataset - only for io, unlabeled are short enough)
 class NetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, *args, reference_dataset=None, reference_id=2):
+    def __init__(self, *args):
         super().__init__()
-
-        self.reference_dataset = reference_dataset[0] if reference_dataset is not None else None
-        self.reference_labels = reference_dataset[1] if reference_dataset is not None else None
-        self.reference_id = reference_id
 
         self.data = args
 
@@ -59,12 +56,60 @@ class NetworkDataset(torch.utils.data.Dataset):
 
     def __getitem__(self, index):
         item = [a[index] for a in self.data]
+        return item
+
+
+class ReferenceNetworkDataset(NetworkDataset):
+    def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0):
+        super().__init__(*args)
+
+        self.reference_dataset = reference_dataset[0] if reference_dataset is not None else None
+        self.reference_labels = reference_dataset[1] if reference_dataset is not None else None
+        self.reference_id = reference_id
+
+        self.net_repo = net_repo
+        self.net_id = net_id
+
+    def get_batch_names(self):
+        """
+        Returns a list of names that describe the batch (the dataset can optionally contain labels, weights and
+        biases).
+
+        Returns:
+            Names of each member of the batch tuple.
+
+        """
+        names = ['adj', 'ops', 'input', 'output']
+
+        if self.reference_dataset is not None:
+            names.append('label')
+
+        if self.net_repo is not None:
+            names.append('weights')
+            names.append('bias')
+
+        return names
+
+    def __getitem__(self, index):
+        item = super().__getitem__(index)
 
         if self.reference_dataset is not None:
             data = self.reference_dataset[item[self.reference_id]]
             label = self.reference_labels[item[self.reference_id]]
             item[self.reference_id] = data
             item.append(label)
+
+        if self.net_repo is not None:
+            hash = item[self.net_id]
+            net_entry = self.net_repo[hash]
+
+            # replace hash entry with adj, ops
+            item[self.net_id] = net_entry['adj']
+            item.insert(self.net_id + 1, net_entry['ops'])
+
+            # additional info goes to the end
+            item.append(net_entry['weights'])
+            item.append(net_entry['bias'])
 
         return item
 

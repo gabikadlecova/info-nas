@@ -3,7 +3,7 @@ import os
 import torch
 from torch import nn
 
-from typing import List, Tuple
+from typing import List, Union
 from nasbench_pytorch.model import Network as NBNetwork
 from info_nas.datasets.networks.utils import load_trained_net
 
@@ -13,29 +13,35 @@ def load_io_dataset(dataset_path: str, device=None):
     return data
 
 
-def dataset_from_pretrained(net_dir: str, nasbench, dataset, save_path: str, random_state=1, device=None, **kwargs):
-
-    # pretrained networks in a folder
+def _list_net_dir(net_dir: str):
     net_paths = os.listdir(net_dir)
-    networks = [load_trained_net(os.path.join(net_dir, net_path), nasbench, device=device) for net_path in net_paths]
+    return [os.path.join(net_dir, n) for n in net_paths]
 
-    dataset = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
 
-    hashes, inputs, outputs, whole_dataset, whole_labels = dataset
-    use_reference = len(inputs.shape) == 1
+def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, random_state=1,
+                            device=None, **kwargs):
+    # pretrained networks in a folder
+    if isinstance(net_dir, str):
+        net_paths = _list_net_dir(net_dir)
+    else:
+        # join multiple folders
+        net_paths = [p for nd in net_dir for p in _list_net_dir(nd)]
 
-    data = {'net_hashes': hashes, 'inputs': inputs, 'outputs': outputs, 'dataset': whole_dataset,
-            'labels': whole_labels, 'use_reference': use_reference, 'n_labeled': len(networks)}
+    networks = (load_trained_net(net_path, nasbench, device=device) for net_path in net_paths)
+
+    data = create_io_dataset(networks, dataset, random_state=random_state, device=device, **kwargs)
     torch.save(data, save_path)
 
     return data
 
 
-def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=0, nth_output=-2, random_state=1,
+def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, random_state=1,
                       loss=None, device=None):
     _, _, valid_loader, validation_size, _, _ = dataset
 
     loaded_dataset = [b for b in valid_loader]
+
+    net_repo = {}
 
     net_hashes = []
     in_list = []
@@ -54,7 +60,18 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
         in_list.append(in_data)
         out_list.append(out_data)
 
-    # form a shuffled dataset
+        out_weight = network.classifier.weight
+        out_bias = network.classifier.bias
+
+        net_repo[net_hash] = {
+            'weights': out_weight,
+            'bias': out_bias
+        }
+
+    return _process_output_data(net_hashes, in_list, out_list, loaded_dataset, net_repo)
+
+
+def _process_output_data(net_hashes, in_list, out_list, loaded_dataset, net_repo):
     net_hashes = np.array(net_hashes)
     in_list = torch.cat(in_list)
     out_list = torch.cat(out_list)
@@ -67,11 +84,13 @@ def create_io_dataset(networks: List[Tuple[str, NBNetwork]], dataset, nth_input=
 
     assert len(net_hashes) == len(in_list) and len(net_hashes) == len(out_list)
 
-    indices = np.arange(len(net_hashes))
-    state = np.random.RandomState(seed=random_state) if random_state is not None else np.random
-    state.shuffle(indices)
+    use_reference = len(in_list.shape) == 1
 
-    return net_hashes[indices], in_list[indices], out_list[indices], torch.cat(loaded_inputs), torch.cat(loaded_targets)
+    # io dataset with hashes, original dataset and network info for reference
+    data = {'net_hashes': net_hashes, 'inputs': in_list, 'outputs': out_list, 'dataset': loaded_inputs,
+            'labels': loaded_targets, 'use_reference': use_reference, 'net_repo': net_repo}
+
+    return data
 
 
 def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=None, num_data=None, device=None):
