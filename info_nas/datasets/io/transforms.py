@@ -2,11 +2,11 @@ import torch
 
 
 class SortByWeights:
-    def __init__(self, include_bias=True, fixed_label=None, return_all_features=False):
+    def __init__(self, include_bias=True, fixed_label=None, return_top_n=None):
         self.include_bias = include_bias
 
         self.fixed_label = fixed_label
-        self.return_all_features = return_all_features
+        self.return_top_n = return_top_n
 
     def __call__(self, item):
         in_vals = item[:3]
@@ -22,12 +22,16 @@ class SortByWeights:
         else:
             sort_key = weights
 
-        if not self.return_all_features:
+        if self.return_top_n is None:
             # sort by target label or one chosen
             sort_key = sort_key[label] if self.fixed_label is None else sort_key[self.fixed_label]
 
-        sort_key, indices = torch.sort(sort_key, descending=True)
-        output = output[indices].detach()
+            sort_key, indices = torch.sort(sort_key, descending=True)
+            output = output[indices].detach()
+        else:
+            sort_key, indices = torch.sort(sort_key, descending=True)
+            outputs_all = output[indices].detach()
+            output = outputs_all[:, self.return_top_n].flatten()
 
         in_vals.extend([output, label, weights, bias])
         in_vals.extend(other_info)
