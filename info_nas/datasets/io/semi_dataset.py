@@ -27,14 +27,15 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 
 
-def labeled_network_dataset(labeled, transforms=None):
+def labeled_network_dataset(labeled, transforms=None, return_hash=False, return_ref_id=False):
     net_repo = labeled['net_repo']
 
     # indexing in the original input (io dataset uses input id 0)
     ref_dataset = (labeled['dataset'], labeled['labels']) if labeled['use_reference'] else None
 
     return ReferenceNetworkDataset(labeled['net_hashes'], labeled['inputs'], labeled['outputs'],
-                                   reference_dataset=ref_dataset, net_repo=net_repo, transform=transforms)
+                                   reference_dataset=ref_dataset, net_repo=net_repo,
+                                   transform=transforms, return_hash=return_hash, return_ref_id=return_ref_id)
 
 
 def unlabeled_network_dataset(dataset):
@@ -61,7 +62,9 @@ class NetworkDataset(torch.utils.data.Dataset):
 
 
 class ReferenceNetworkDataset(NetworkDataset):
-    def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0, transform=None):
+    def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0,
+                 return_hash=False, return_ref_id=False, transform=None):
+
         super().__init__(*args)
 
         self.reference_dataset = reference_dataset[0] if reference_dataset is not None else None
@@ -70,6 +73,9 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         self.net_repo = net_repo
         self.net_id = net_id
+
+        self.return_hash = return_hash
+        self.return_ref_id = return_ref_id
 
         self.transform = transform
 
@@ -91,6 +97,12 @@ class ReferenceNetworkDataset(NetworkDataset):
             names.append('weights')
             names.append('bias')
 
+        if self.return_hash:
+            names.append('hash')
+
+        if self.return_ref_id:
+            names.append('ref_id')
+
         return names
 
     def __getitem__(self, index):
@@ -98,15 +110,17 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         # get inputs from the reference dataset
         if self.reference_dataset is not None:
-            data = self.reference_dataset[item[self.reference_id]]
-            label = self.reference_labels[item[self.reference_id]]
+            ref_id = item[self.reference_id]
+
+            data = self.reference_dataset[ref_id]
+            label = self.reference_labels[ref_id]
             item[self.reference_id] = data
             item.append(label)
 
         # get network metadata
         if self.net_repo is not None:
-            hash = item[self.net_id]
-            net_entry = self.net_repo[hash]
+            net_hash = item[self.net_id]
+            net_entry = self.net_repo[net_hash]
 
             # replace hash entry with adj, ops
             item[self.net_id] = net_entry['adj']
@@ -115,6 +129,12 @@ class ReferenceNetworkDataset(NetworkDataset):
             # additional info goes to the end
             item.append(net_entry['weights'])
             item.append(net_entry['bias'])
+
+            if self.return_hash:
+                item.append(net_hash)
+
+        if self.return_ref_id and self.reference_dataset is not None:
+            item.append(ref_id)
 
         if self.transform is not None:
             item = self.transform(item)
