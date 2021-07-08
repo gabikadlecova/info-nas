@@ -63,7 +63,7 @@ class NetworkDataset(torch.utils.data.Dataset):
 
 class ReferenceNetworkDataset(NetworkDataset):
     def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0,
-                 return_hash=False, return_ref_id=False, transform=None):
+                 return_hash=True, return_ref_id=False, transform=None):
 
         super().__init__(*args)
 
@@ -77,6 +77,7 @@ class ReferenceNetworkDataset(NetworkDataset):
         self.return_hash = return_hash
         self.return_ref_id = return_ref_id
 
+        self._batch_names = self.get_batch_names()
         self.transform = transform
 
     def get_batch_names(self):
@@ -135,6 +136,8 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         if self.return_ref_id and self.reference_dataset is not None:
             item.append(ref_id)
+
+        item = {name: v for name, v in zip(self._batch_names, item)}
 
         if self.transform is not None:
             item = self.transform(item)
