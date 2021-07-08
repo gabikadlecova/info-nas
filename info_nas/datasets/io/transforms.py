@@ -3,10 +3,17 @@ import pickle
 import torch
 
 
-class SortByWeights:
-    def __init__(self, include_bias=True, fixed_label=None, return_top_n=None):
-        self.include_bias = include_bias
+class IncludeBias:
+    def __call__(self, item):
+        output = item['output']
+        output = torch.cat([output, torch.Tensor([1.0])])
+        item['output'] = output
+        item['include_bias'] = True
+        return item
 
+
+class SortByWeights:
+    def __init__(self, fixed_label=None, return_top_n=None):
         self.fixed_label = fixed_label
         self.return_top_n = return_top_n
 
@@ -15,9 +22,10 @@ class SortByWeights:
         label = item['label']
         weights, bias = item['weights'], item['bias']
 
-        if self.include_bias:
+        include_bias = item['include_bias'] if 'include_bias' in item else False
+
+        if include_bias:
             sort_key = torch.cat([weights, bias.unsqueeze(-1)], dim=1)
-            output = torch.cat([output, torch.Tensor([1.0])])
         else:
             sort_key = weights
 

@@ -303,7 +303,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, dataset_transforms=None
 
         # epoch stats
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
-        if epoch == epochs + 1 or make_checkpoint:
+        if epoch == epochs - 1 or make_checkpoint:
             save_extended_vae(checkpoint_path, model_labeled, optimizer, epoch,
                               model_config['model_class'], model_config['model_kwargs'])
 
