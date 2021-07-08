@@ -1,4 +1,5 @@
 import datetime
+import json
 import os
 import pickle
 
@@ -83,7 +84,7 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
     os.mkdir(checkpoint_path)
 
     model, metrics, loss = train(labeled, unlabeled, nb, transforms=transforms, valid_transforms=val_transforms,
-                                 checkpoint_path=checkpoint_path, device=device, use_reference_model=use_ref,
+                                 checkpoint_dir=checkpoint_path, device=device, use_reference_model=use_ref,
                                  batch_len_labeled=4, model_config=model_cfg,
                                  batch_size=batch_size, seed=seed, epochs=epochs)
 
@@ -92,6 +93,11 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
 
     with open(os.path.join(checkpoint_path, 'losses.pickle'), 'wb') as f:
         pickle.dump(loss, f)
+
+    if model_cfg is not None:
+        config_path = os.path.join(checkpoint_path, 'config.json')
+        with open(config_path, 'w+') as f:
+            json.dump(model_cfg, f)
 
     # TODO deterministic etc
 

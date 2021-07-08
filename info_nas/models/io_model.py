@@ -10,9 +10,16 @@ from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten
 
 
 class IOModel(nn.Module):
-    def __init__(self, vae_model):
+    def __init__(self, vae_model, activation=None):
         super().__init__()
         self.vae_model = vae_model
+
+        if activation is None or activation.lower() == 'linear':
+            self.activation = None
+        elif activation.lower() == 'sigmoid':
+            self.activation = nn.Sigmoid()
+        else:
+            raise ValueError("Unsupported activation")
 
     @abstractmethod
     def inputs_forward(self, z, inputs):
@@ -27,9 +34,10 @@ class IOModel(nn.Module):
 
 class ConcatConvModel(IOModel):
     def __init__(self, vae_model, input_channels, output_channels, start_channels=128, z_hidden=16,
-                 n_steps=2, n_convs=2, dense_output=True, use_3x3_for_z=False, use_3x3_for_output=False):
+                 n_steps=2, n_convs=2, dense_output=True, activation=None,
+                 use_3x3_for_z=False, use_3x3_for_output=False):
 
-        super().__init__(vae_model)
+        super().__init__(vae_model, activation=activation)
 
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
 
@@ -63,9 +71,6 @@ class ConcatConvModel(IOModel):
             else:
                 self.last_layer = nn.Conv2d(channels, output_channels, 1, padding=0)
 
-        # TODO
-        self.activation = nn.Sigmoid()
-
     def inputs_forward(self, z, inputs):
         # process 2D latent features to a vector
         z = self.process_z(z)
@@ -79,7 +84,8 @@ class ConcatConvModel(IOModel):
         if self.dense_output:
             z = torch.mean(z, (2, 3))
 
-        return self.activation(self.last_layer(z))
+        z = self.last_layer(z)
+        return self.activation(z) if self.activation is not None else z
 
 
 model_dict = {

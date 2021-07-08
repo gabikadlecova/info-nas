@@ -27,8 +27,13 @@ local_model_cfg = {
     'model_kwargs': {
         'n_steps': 2,
         'n_convs': 2,
-        'use_3x3_for_z': False,
-        'use_3x3_for_output': False
+        'activation': 'linear'
+    },
+    'optimizer': {
+        'name': 'Adam',
+        'lr': 1e-4,
+        'betas': (0.9, 0.999),
+        'eps': 1e-08
     },
     'out_channels': 513,
     'loss': 'MSE',

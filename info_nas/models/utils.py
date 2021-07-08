@@ -1,6 +1,7 @@
 import os
 
 import torch
+from torch import optim
 
 from info_nas.models.io_model import model_dict
 
@@ -39,3 +40,14 @@ def load_extended_vae(model_path, model_args, device=None, optimizer=None):
     checkpoint.pop('model_state')
     checkpoint.pop('optimizer_state')
     return model, checkpoint
+
+
+def get_optimizer(model, name='adam', **kwargs):
+    if name.lower() == 'adam':
+        optimizer = optim.Adam
+    elif name.lower() == 'sgd':
+        optimizer = optim.SGD
+    else:
+        raise ValueError(f"Unsupported optimizer name: {name}")
+
+    return optimizer(model.parameters(), **kwargs)
