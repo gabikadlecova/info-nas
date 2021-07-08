@@ -9,19 +9,22 @@ from nasbench import api
 
 
 @click.command()
+@click.argument('scale_name')
 @click.option('--dataset', default='../data/train_labeled.pt')
+@click.option('--scale_name', default='train')
 @click.option('--scale_save_dir', default='../data/scales/')
 @click.option('--per_label/--per_net', default=False)
 @click.option('--axis', default=None, type=int)
 @click.option('--include_bias/--no_bias', default=True)
-def main(dataset, scale_save_dir, per_label, axis, include_bias):
+def main(scale_name, dataset, scale_save_dir, per_label, axis, include_bias):
     dataset = load_io_dataset(dataset)
 
     if not os.path.exists(scale_save_dir):
         os.mkdir(scale_save_dir)
 
     scale_save_path = os.path.join(scale_save_dir,
-                                   f"scale{'-include_bias' if include_bias else ''}"
+                                   f"scale-{scale_name}"
+                                   f"{'-include_bias' if include_bias else ''}"
                                    f"{'-per_label' if per_label else ''}"
                                    f"{'-axis_' + str(axis) if axis is not None else ''}.pickle")
 

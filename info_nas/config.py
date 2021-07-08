@@ -30,6 +30,7 @@ local_model_cfg = {
         'use_3x3_for_z': False,
         'use_3x3_for_output': False
     },
+    'out_channels': 513,
     'loss': 'MSE',
     'checkpoint': 5,
     'dataset_config': {

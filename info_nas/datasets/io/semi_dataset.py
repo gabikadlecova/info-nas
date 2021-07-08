@@ -6,10 +6,11 @@ import torch.utils.data
 
 
 def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_size=32, n_workers=0, shuffle=True,
-                             val_batch_size=100, n_valid_workers=0, labeled_transforms=None, **kwargs):
+                             val_batch_size=100, n_valid_workers=0, labeled_transforms=None,
+                             labeled_val_transforms=None, **kwargs):
 
     train_labeled = labeled_network_dataset(labeled['train'], transforms=labeled_transforms)
-    valid_labeled = labeled_network_dataset(labeled['valid'], transforms=labeled_transforms)
+    valid_labeled = labeled_network_dataset(labeled['valid'], transforms=labeled_val_transforms)
 
     train_unlabeled = unlabeled_network_dataset(unlabeled['train'])
     valid_unlabeled = unlabeled_network_dataset(unlabeled['val'])
@@ -27,7 +28,7 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 
 
-def labeled_network_dataset(labeled, transforms=None, return_hash=False, return_ref_id=False):
+def labeled_network_dataset(labeled, transforms=None, return_hash=True, return_ref_id=False):
     net_repo = labeled['net_repo']
 
     # indexing in the original input (io dataset uses input id 0)
@@ -213,7 +214,6 @@ class SemiSupervisedDataset:
         except StopIteration:
             self.unlabeled_iter = iter(self.unlabeled)
             return next(self.unlabeled_iter)
-
 
     def should_choose_labeled(self):
         """

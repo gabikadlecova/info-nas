@@ -20,10 +20,10 @@ from info_nas.config import local_model_cfg, load_json_cfg
 from info_nas.models.losses import losses_dict
 
 
-def _initialize_labeled_model(model, in_channels, out_channels, model_config=None, device=None):
+def _initialize_labeled_model(model, in_channels, model_config=None, device=None):
     model_class = model_dict[model_config['model_class']]
 
-    model = model_class(model, in_channels, out_channels, **model_config['model_kwargs'])
+    model = model_class(model, in_channels, model_config['out_channels'], **model_config['model_kwargs'])
     if device is not None:
         model = model.to(device)
 
@@ -196,8 +196,9 @@ def _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_determ
     return config, model_config
 
 
-def train(labeled, unlabeled, nasbench, checkpoint_path, dataset_transforms=None, use_reference_model=False,
-          model_config=None, device=None, batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000,
+def train(labeled, unlabeled, nasbench, checkpoint_path, transforms=None, valid_transforms=None,
+          use_reference_model=False, model_config=None, device=None,
+          batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000,
           batch_len_labeled=4, torch_deterministic=False, cudnn_deterministic=False):
 
     config, model_config = _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_deterministic)
@@ -207,9 +208,10 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, dataset_transforms=None
         writer = SummaryWriter(writer)
 
     # init dataset
-    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(labeled, unlabeled, batch_size=batch_size,
-                                                                             labeled_transforms=dataset_transforms,
-                                                                             **model_config['dataset_config'])
+    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(
+        labeled, unlabeled, batch_size=batch_size, labeled_transforms=transforms,
+        labeled_val_transforms=valid_transforms, **model_config['dataset_config']
+    )
     dataset_len = len(train_dataset)
 
     # init models
@@ -218,12 +220,10 @@ def train(labeled, unlabeled, nasbench, checkpoint_path, dataset_transforms=None
     else:
         in_channels = labeled['train']['dataset'].shape[1]
 
-    out_channels = labeled['train']['outputs'].shape[1]
-
     # init models
     model, optimizer = get_arch2vec_model(device=device)
-    model_labeled = _initialize_labeled_model(model, in_channels, out_channels,
-                                              device=device, model_config=model_config)
+    model_labeled = _initialize_labeled_model(model, in_channels, device=device, model_config=model_config)
+
     if use_reference_model:
         model_ref, optimizer_ref = get_arch2vec_model(device=device)
         model_ref.load_state_dict(model.state_dict())
