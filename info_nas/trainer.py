@@ -5,6 +5,7 @@ import numpy as np
 import random
 import torch
 import torch.backends.cudnn
+from info_nas.eval import mean_losses, eval_epoch, init_stats_dict
 from torch.utils.tensorboard import SummaryWriter
 
 from arch2vec.models.model import VAEReconstructed_Loss
@@ -12,7 +13,6 @@ from info_nas.models.utils import save_extended_vae, get_optimizer
 from torch import nn
 
 from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
-from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing, save_checkpoint_vae
 from arch2vec.models.configs import configs
 
@@ -61,35 +61,17 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
     loss_func_vae = VAEReconstructed_Loss(**config['loss'])
     loss_func_labeled = losses_dict[model_config['loss']]
 
-    # stats for all three model variants
-    def init_loss_lists():
-        return {
-            'total': [],
-            'unlabeled': [],
-            'labeled': []
-        }
-
-    def init_stats_dict(use_loss_list=True):
-        return {
-            'labeled': init_loss_lists() if use_loss_list else [],
-            'unlabeled': init_loss_lists() if use_loss_list else [],
-            'reference': init_loss_lists() if use_loss_list else []
-        }
-
-    loss_lists_total = init_stats_dict()
-    metrics_total = {
-        'labeled': {},
-        'unlabeled': {},
-        'reference': {}
-    }
+    # stats for all three model variants (labeled, unlabeled, reference)
+    loss_lists_total = init_stats_dict('loss')
+    metrics_total = init_stats_dict('metrics')
 
     for epoch in range(epochs):
         model.train()
         model_labeled.train()
 
         n_labeled_batches, n_unlabeled_batches = 0, 0
-        loss_lists_epoch = init_stats_dict()
-        Z = init_stats_dict(use_loss_list=False)
+        loss_lists_epoch = init_stats_dict('loss')
+        Z = init_stats_dict()
 
         for i, batch in enumerate(train_dataset):
             # determine if labeled/unlabeled batch
@@ -125,7 +107,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
             if verbose > 0 and i % print_frequency == 0:
                 print(f'epoch {epoch}: batch {i} / {dataset_len}: ')
                 for key, losses in loss_lists_epoch.items():
-                    losses = ", ".join([f"{k}: {v}" for k, v in _mean_losses(losses).items()])
+                    losses = ", ".join([f"{k}: {v}" for k, v in mean_losses(losses).items()])
                     print(f"\t {key}: {losses}")
 
                 print(f'\t labeled batches: {n_labeled_batches}, unlabeled batches: {n_unlabeled_batches}')
@@ -140,11 +122,15 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
             orig_path = os.path.join(checkpoint_dir, f"model_orig_epoch-{epoch}.pt")
             save_checkpoint_vae(model, optimizer, epoch, None, None, None, None, None, f_path=orig_path)
 
+            if use_reference_model:
+                orig_path = os.path.join(checkpoint_dir, f"model_ref_epoch-{epoch}.pt")
+                save_checkpoint_vae(model_ref, optimizer_ref, epoch, None, None, None, None, None, f_path=orig_path)
+
             # TODO checkpoint metrics
             #  - save to pandas
 
-        _eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                    device, nasbench, valid_unlabeled, config, verbose=verbose)
+        eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
+                   device, nasbench, valid_unlabeled, valid_labeled, config, loss_func_labeled, verbose=verbose)
 
         # TODO tensorboard?
 
@@ -199,81 +185,6 @@ def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_hist
         loss_history['labeled'].append(labeled_out.item())
 
     return total_out
-
-
-# TODO eval loss dict separate, eval models
-
-def _eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
-                nasbench, valid_unlabeled, config, verbose=2):
-    def metrics_list(res_dict, key):
-        return res_dict.setdefault(key, [])
-
-    model_map = {
-        'labeled': model_labeled,
-        'unlabeled': model,
-        'reference': model_reference
-    }
-
-    # validity and uniqueness
-    for z_name, z_vec in Z.items():
-        z_model = model_map[z_name]
-        if z_name == 'labeled' or z_model is None:
-            continue
-
-        z_vec = torch.cat(z_vec, dim=0).to(device)
-        z_mean, z_std = z_vec.mean(0), z_vec.std(0)
-
-        validity, uniqueness = eval_validity_and_uniqueness(z_model, z_mean, z_std, nasbench, device=device)
-
-        metrics_list(metrics_res_dict[z_name], 'validity').append(validity)
-        metrics_list(metrics_res_dict[z_name], 'uniqueness').append(uniqueness)
-
-        if verbose > 1:
-            print('{}: Ratio of valid decodings from the prior: {:.4f}'.format(z_name, validity))
-            print('{}: Ratio of unique decodings from the prior: {:.4f}'.format(z_name, uniqueness))
-
-    # validation accuracy
-    for m_name, m in model_map.items():
-        if m is None:
-            continue
-
-        if m_name == 'labeled':
-            continue # TODO!!!
-        else:
-            val_stats = eval_validation_accuracy(
-                m, valid_unlabeled, config=config, device=device
-            )
-
-            stats_names = ['acc_ops_val', 'mean_corr_adj_val', 'mean_fal_pos_adj_val', 'acc_adj_val']
-            for n, val in zip(stats_names, val_stats):
-                metrics_list(metrics_res_dict[m_name], n).append(val)
-
-            if verbose > 1:
-                print(
-                    'validation set: acc_ops:{0:.4f}, mean_corr_adj:{1:.4f}, mean_fal_pos_adj:{2:.4f}, acc_adj:{3:.4f}'.format(
-                        *val_stats
-                    )
-                )
-
-    # TODO loss to metrics?
-    # TODO res to pandas
-    # TODO split this eval func
-
-    for k, loss_dict in losses_total.items():
-        epoch_means = _mean_losses(losses_epoch[k])
-
-        if verbose > 0:
-            print('epoch {} loss: {} {}'.format(epoch, k, epoch_means))
-
-        for loss_name, mean_val in epoch_means.items():
-            loss_dict[loss_name].append(mean_val)
-
-
-def _mean_losses(loss_lists):
-    return {k: np.mean(v) for k, v in loss_lists.items() if len(v)}
-
-
-# TODO remove labeled hashes from unlabeled
 
 
 def _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled, loss_list, Z,

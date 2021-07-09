@@ -28,6 +28,14 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
 
 
+def enumerate_validation_labeled(network_dataset, labeled_batches=False):
+    for b in network_dataset:
+        if labeled_batches:
+            yield b
+        else:
+            yield b[:2]
+
+
 def labeled_network_dataset(labeled, transforms=None, return_hash=True, return_ref_id=False):
     net_repo = labeled['net_repo']
 
