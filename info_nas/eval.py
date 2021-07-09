@@ -120,13 +120,16 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
             loss_dict[loss_name].append(mean_val)
 
 
-def checkpoint_metrics_losses(metrics, losses, save_dir, epoch):
+def checkpoint_metrics_losses(metrics, losses, save_dir):
     metrics_df = []
-    for k, metrics in metrics.items():
-        metrics_df.append({'model': k, **metrics})
+    for k, metric_list in metrics.items():
+        for m_name, m_vals in metric_list.items():
+            metrics_df.append([f"{k}_{m_name}", *m_vals])
 
-    metrics_df = pd.DataFrame(metrics_df)
-    metrics_df.to_csv(os.path.join(save_dir, f"metrics_epoch-{epoch}.csv"), index=False)
+    metrics_df = pd.DataFrame(metrics_df).T
+    metrics_df.columns = metrics_df.iloc[0]
+    metrics_df.drop(index=0, inplace=True)
+    metrics_df.to_csv(os.path.join(save_dir, f"metrics.csv"))
 
     loss_df = []
     for k, loss in losses.items():
@@ -136,7 +139,7 @@ def checkpoint_metrics_losses(metrics, losses, save_dir, epoch):
     loss_df = pd.DataFrame(loss_df).T
     loss_df.columns = loss_df.iloc[0]
     loss_df.drop(index=0, inplace=True)
-    loss_df.to_csv(os.path.join(save_dir, f"loss_epoch-{epoch}.csv"), index=False)
+    loss_df.to_csv(os.path.join(save_dir, f"loss.csv"))
 
 
 def mean_losses(loss_lists):

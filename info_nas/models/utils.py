@@ -31,7 +31,7 @@ def load_extended_vae(model_path, model_args, device=None, optimizer=None):
     model_class = model_dict[checkpoint['model_class']]
     model = model_class(*model_args, **kwargs)
 
-    model.load_state_dict(checkpoint['model_state_dict'])
+    model.load_state_dict(checkpoint['model_state'])
     model = model.to(device)
 
     if optimizer is not None:

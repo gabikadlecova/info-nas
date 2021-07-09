@@ -118,7 +118,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
         if epoch == epochs - 1 or make_checkpoint:
-            checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir, epoch)
+            checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir)
 
             save_extended_vae(checkpoint_dir, model_labeled, optimizer_labeled, epoch,
                               model_config['model_class'], model_config['model_kwargs'])
