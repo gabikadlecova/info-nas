@@ -1,5 +1,8 @@
 # TODO eval loss dict separate, eval models
+import os
+
 import numpy as np
+import pandas as pd
 import torch
 from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing
@@ -88,6 +91,8 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
             val_loss = eval_labeled_validation(m, labeled_gen_full, device, config, loss_labeled)
             _metrics_list(metrics_res_dict[m_name], 'val_loss').append(val_loss)
+            if verbose > 1:
+                print(f"Validation labeled loss: {val_loss}")
 
             # evaluate reconstruction accuracy on labeled batches using unlabeled (original) model
             val_set = labeled_gen_2
@@ -103,7 +108,6 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
         eval_vae_validation(m, val_set, metrics_res_dict[m_name], device, config, verbose=verbose,
                             n_validation=n_validation)
 
-    # TODO res to pandas
     # TODO split this eval func
 
     for k, loss_dict in losses_total.items():
@@ -114,6 +118,25 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
         for loss_name, mean_val in epoch_means.items():
             loss_dict[loss_name].append(mean_val)
+
+
+def checkpoint_metrics_losses(metrics, losses, save_dir, epoch):
+    metrics_df = []
+    for k, metrics in metrics.items():
+        metrics_df.append({'model': k, **metrics})
+
+    metrics_df = pd.DataFrame(metrics_df)
+    metrics_df.to_csv(os.path.join(save_dir, f"metrics_epoch-{epoch}.csv"), index=False)
+
+    loss_df = []
+    for k, loss in losses.items():
+        for loss_name, loss_values in loss.items():
+            loss_df.append([f"{k}_{loss_name}", *loss_values])
+
+    loss_df = pd.DataFrame(loss_df).T
+    loss_df.columns = loss_df.iloc[0]
+    loss_df.drop(index=0, inplace=True)
+    loss_df.to_csv(os.path.join(save_dir, f"loss_epoch-{epoch}.csv"), index=False)
 
 
 def mean_losses(loss_lists):

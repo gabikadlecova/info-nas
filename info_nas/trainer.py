@@ -5,7 +5,7 @@ import numpy as np
 import random
 import torch
 import torch.backends.cudnn
-from info_nas.eval import mean_losses, eval_epoch, init_stats_dict
+from info_nas.eval import mean_losses, eval_epoch, init_stats_dict, checkpoint_metrics_losses
 from torch.utils.tensorboard import SummaryWriter
 
 from arch2vec.models.model import VAEReconstructed_Loss
@@ -113,8 +113,13 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
                 print(f'\t labeled batches: {n_labeled_batches}, unlabeled batches: {n_unlabeled_batches}')
 
         # epoch stats
+        eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
+                   device, nasbench, valid_unlabeled, valid_labeled, config, loss_func_labeled, verbose=verbose)
+
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
         if epoch == epochs - 1 or make_checkpoint:
+            checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir, epoch)
+
             save_extended_vae(checkpoint_dir, model_labeled, optimizer_labeled, epoch,
                               model_config['model_class'], model_config['model_kwargs'])
 
@@ -125,12 +130,6 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
             if use_reference_model:
                 orig_path = os.path.join(checkpoint_dir, f"model_ref_epoch-{epoch}.pt")
                 save_checkpoint_vae(model_ref, optimizer_ref, epoch, None, None, None, None, None, f_path=orig_path)
-
-            # TODO checkpoint metrics
-            #  - save to pandas
-
-        eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                   device, nasbench, valid_unlabeled, valid_labeled, config, loss_func_labeled, verbose=verbose)
 
         # TODO tensorboard?
 
