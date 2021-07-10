@@ -7,8 +7,6 @@ import torch
 from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing
 
-from info_nas.datasets.io.semi_dataset import enumerate_validation_labeled
-
 
 def _metrics_list(res_dict, key):
     return res_dict.setdefault(key, [])
@@ -53,7 +51,7 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled):
 
 
 def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
-               nasbench, valid_unlabeled, valid_labeled, config, loss_labeled, verbose=2):
+               nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_labeled, verbose=2):
 
     model_map = {
         'labeled': model_labeled,
@@ -86,16 +84,13 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
         # labeled only eval
         if m_name == 'labeled':
-            labeled_gen_2 = enumerate_validation_labeled(valid_labeled, labeled_batches=False)
-            labeled_gen_full = enumerate_validation_labeled(valid_labeled, labeled_batches=True)
-
-            val_loss = eval_labeled_validation(m, labeled_gen_full, device, config, loss_labeled)
+            val_loss = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled)
             _metrics_list(metrics_res_dict[m_name], 'val_loss').append(val_loss)
             if verbose > 1:
                 print(f"Validation labeled loss: {val_loss}")
 
             # evaluate reconstruction accuracy on labeled batches using unlabeled (original) model
-            val_set = labeled_gen_2
+            val_set = valid_labeled_orig
             n_validation = len(valid_labeled)
             m = model_map['unlabeled']
         else:

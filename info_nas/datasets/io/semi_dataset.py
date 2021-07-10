@@ -1,5 +1,6 @@
 import math
 import warnings
+from functools import partial
 
 import torch
 import torch.utils.data
@@ -25,15 +26,9 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     valid_unlabeled_dataset = torch.utils.data.DataLoader(valid_unlabeled, batch_size=val_batch_size,
                                                           num_workers=math.ceil(n_valid_workers / 2), **kwargs)
 
-    return train_dataset, valid_labeled_dataset, valid_unlabeled_dataset
+    valid_labeled_unique = partial(validation_labeled_nets, valid_labeled, batch_size=val_batch_size)
 
-
-def enumerate_validation_labeled(network_dataset, labeled_batches=False):
-    for b in network_dataset:
-        if labeled_batches:
-            yield b
-        else:
-            yield b[:2]
+    return train_dataset, valid_labeled_dataset, valid_labeled_unique, valid_unlabeled_dataset
 
 
 def labeled_network_dataset(labeled, transforms=None, return_hash=True, return_ref_id=False):
@@ -115,7 +110,7 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         return names
 
-    def __getitem__(self, index):
+    def __getitem__(self, index, no_transform=False):
         item = super().__getitem__(index)
 
         # get inputs from the reference dataset
@@ -148,10 +143,32 @@ class ReferenceNetworkDataset(NetworkDataset):
 
         item = {name: v for name, v in zip(self._batch_names, item)}
 
-        if self.transform is not None:
+        if self.transform is not None and not no_transform:
             item = self.transform(item)
 
         return item
+
+
+def validation_labeled_nets(net_dataset: ReferenceNetworkDataset, batch_size=32):
+    used_hashes = set()
+    batch_adj = []
+    batch_ops = []
+    dataset_len = len(net_dataset)
+
+    for i in range(dataset_len):
+        item = net_dataset.__getitem__(index=i, no_transform=True)
+
+        if item['hash'] in used_hashes:
+            continue
+
+        used_hashes.add(item['hash'])
+        batch_adj.append(item['adj'])
+        batch_ops.append(item['ops'])
+
+        if len(batch_adj) == batch_size or i == dataset_len - 1:
+            yield torch.stack(batch_adj), torch.stack(batch_ops)
+            batch_adj.clear()
+            batch_ops.clear()
 
 
 class SemiSupervisedDataset:

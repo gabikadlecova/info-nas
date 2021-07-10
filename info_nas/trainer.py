@@ -34,7 +34,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
         writer = SummaryWriter(writer)
 
     # init dataset
-    train_dataset, valid_labeled, valid_unlabeled = get_train_valid_datasets(
+    train_dataset, valid_labeled, valid_labeled_orig, valid_unlabeled = get_train_valid_datasets(
         labeled, unlabeled, batch_size=batch_size, labeled_transforms=transforms,
         labeled_val_transforms=valid_transforms, **model_config['dataset_config']
     )
@@ -114,7 +114,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
         # epoch stats
         eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                   device, nasbench, valid_unlabeled, valid_labeled, config, loss_func_labeled, verbose=verbose)
+                   device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig(), config, loss_func_labeled,
+                   verbose=verbose)
 
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
         if epoch == epochs - 1 or make_checkpoint:
