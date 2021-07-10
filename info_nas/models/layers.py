@@ -29,3 +29,18 @@ class LatentNodesFlatten(nn.Module):
 
     def forward(self, z):
         return self.process_z(z)
+
+
+def get_conv_list(n_steps, n_convs, channels):
+    conv_list = []
+
+    for _ in range(n_steps):
+        for _ in range(n_convs - 1):
+            conv_list.append(ConvBnRelu(channels, channels, kernel_size=3, padding=1))
+
+        # halve dimension, double channels
+        next_channels = channels * 2
+        conv_list.append(ConvBnRelu(channels, next_channels, kernel_size=3, stride=2, padding=1))
+        channels = next_channels
+
+    return nn.Sequential(*conv_list), channels

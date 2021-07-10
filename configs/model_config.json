@@ -1,9 +1,10 @@
 {
-    "model_class": "concat",
+    "model_class": "dense",
     "model_kwargs": {
         "n_steps": 2,
         "n_convs": 2,
-        "activation": "linear"
+        "activation": "linear",
+        "dropout": 0.5
     },
     "optimizer": {
         "name": "Adam",
@@ -14,7 +15,7 @@
     "checkpoint": 5,
     "dataset_config": {
         "k": 40,
-        "repeat_unlabeled": 1,
+        "repeat_unlabeled": 3,
         "n_workers": 4,
         "n_valid_workers": 4
     },

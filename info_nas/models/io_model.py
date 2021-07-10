@@ -6,7 +6,7 @@ from abc import abstractmethod
 #    a) encode input into a vec
 #    b) the embedding is the second actual input
 #    c) vae of io data first, then dense (u-)net
-from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten
+from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list
 
 
 class IOModel(nn.Module):
@@ -42,24 +42,14 @@ class ConcatConvModel(IOModel):
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
 
         channels = start_channels
-        conv_list = []
 
         # handle concatenated zs
         if use_3x3_for_z:
-            conv_list.append(ConvBnRelu(input_channels + z_hidden, channels, kernel_size=3, padding=1))
+            self.concat_conv = ConvBnRelu(input_channels + z_hidden, channels, kernel_size=3, padding=1)
         else:
-            conv_list.append(ConvBnRelu(input_channels + z_hidden, channels))
+            self.concat_conv = ConvBnRelu(input_channels + z_hidden, channels)
 
-        for _ in range(n_steps):
-            for _ in range(n_convs - 1):
-                conv_list.append(ConvBnRelu(channels, channels, kernel_size=3, padding=1))
-
-            # halve dimension, double channels
-            next_channels = channels * 2
-            conv_list.append(ConvBnRelu(channels, next_channels, kernel_size=3, stride=2, padding=1))
-            channels = next_channels
-
-        self.conv_list = nn.Sequential(*conv_list)
+        self.conv_list, channels = get_conv_list(n_steps, n_convs, channels)
 
         self.dense_output = dense_output
         # output info
@@ -79,6 +69,7 @@ class ConcatConvModel(IOModel):
         z = z.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, inputs.shape[2], inputs.shape[3])
         z = torch.cat([inputs, z], dim=1)
 
+        z = self.concat_conv(z)
         z = self.conv_list(z)
 
         if self.dense_output:
@@ -88,6 +79,44 @@ class ConcatConvModel(IOModel):
         return self.activation(z) if self.activation is not None else z
 
 
+class DensePredConvModel(IOModel):
+    def __init__(self, vae_model, input_channels, output_channels, start_channels=128, activation=None, z_hidden=16,
+                 n_steps=2, n_convs=2, n_dense=1, dense_size=512, dropout=None):
+
+        super().__init__(vae_model, activation=activation)
+
+        self.first_conv = ConvBnRelu(input_channels, start_channels, kernel_size=3, padding=1)
+        self.conv_list, channels = get_conv_list(n_steps, n_convs, start_channels)
+
+        self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
+        self.concat_dense = nn.Linear(z_hidden + channels, dense_size)
+
+        dense_list = []
+
+        for i in range(n_dense):
+            dense_list.append(nn.ReLU())
+            if dropout is not None:
+                dense_list.append(nn.Dropout(dropout))
+
+            next_size = output_channels if i == n_dense - 1 else dense_size
+            dense_list.append(nn.Linear(dense_size, next_size))
+
+        self.dense_list = nn.Sequential(*dense_list)
+
+    def inputs_forward(self, z, inputs):
+        x = self.first_conv(inputs)
+        x = self.conv_list(x)
+        x = torch.mean(x, (2, 3))
+
+        z = self.process_z(z)
+        z = torch.cat([z, x], dim=1)
+        z = self.concat_dense(z)
+
+        z = self.dense_list(z)
+        return self.activation(z) if self.activation is not None else z
+
+
 model_dict = {
-    'concat': ConcatConvModel
+    'concat': ConcatConvModel,
+    'dense': DensePredConvModel
 }
