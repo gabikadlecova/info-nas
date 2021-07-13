@@ -26,7 +26,7 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     valid_unlabeled_dataset = torch.utils.data.DataLoader(valid_unlabeled, batch_size=val_batch_size,
                                                           num_workers=math.ceil(n_valid_workers / 2), **kwargs)
 
-    valid_labeled_unique = partial(validation_labeled_nets, valid_labeled, batch_size=val_batch_size)
+    valid_labeled_unique = UniqueValidationNets(valid_labeled, batch_size=val_batch_size)
 
     return train_dataset, valid_labeled_dataset, valid_labeled_unique, valid_unlabeled_dataset
 
@@ -149,26 +149,43 @@ class ReferenceNetworkDataset(NetworkDataset):
         return item
 
 
-def validation_labeled_nets(net_dataset: ReferenceNetworkDataset, batch_size=32):
-    used_hashes = set()
-    batch_adj = []
-    batch_ops = []
-    dataset_len = len(net_dataset)
+class UniqueValidationNets:
+    def __init__(self, net_dataset: ReferenceNetworkDataset, batch_size=32):
+        self.net_dataset = net_dataset
+        self.batch_size = batch_size
 
-    for i in range(dataset_len):
-        item = net_dataset.__getitem__(index=i, no_transform=True)
+        self.unique_ids = []
+        self._init_unique_nets()
 
-        if item['hash'] in used_hashes:
-            continue
+    def __len__(self):
+        batch_diff = len(self.unique_ids) % self.batch_size
+        n_batches = len(self.unique_ids) // self.batch_size
+        return n_batches + (1 if batch_diff > 0 else 0)
 
-        used_hashes.add(item['hash'])
-        batch_adj.append(item['adj'])
-        batch_ops.append(item['ops'])
+    def _init_unique_nets(self):
+        used_hashes = set()
+        dataset_len = len(self.net_dataset)
 
-        if len(batch_adj) == batch_size or i == dataset_len - 1:
-            yield torch.stack(batch_adj), torch.stack(batch_ops)
-            batch_adj.clear()
-            batch_ops.clear()
+        for i in range(dataset_len):
+            item = self.net_dataset.__getitem__(index=i, no_transform=True)
+
+            if item['hash'] not in used_hashes:
+                used_hashes.add(item['hash'])
+                self.unique_ids.append(i)
+
+    def __iter__(self):
+        batch_adj = []
+        batch_ops = []
+
+        for i in self.unique_ids:
+            item = self.net_dataset.__getitem__(index=i, no_transform=True)
+            batch_adj.append(item['adj'])
+            batch_ops.append(item['ops'])
+
+            if len(batch_adj) == self.batch_size or i == self.unique_ids[-1]:
+                yield torch.stack(batch_adj), torch.stack(batch_ops)
+                batch_adj.clear()
+                batch_ops.clear()
 
 
 class SemiSupervisedDataset:

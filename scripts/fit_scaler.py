@@ -11,7 +11,6 @@ from nasbench import api
 @click.command()
 @click.argument('scale_name')
 @click.option('--dataset', default='../data/train_labeled.pt')
-@click.option('--scale_name', default='train')
 @click.option('--scale_save_dir', default='../data/scales/')
 @click.option('--per_label/--per_net', default=False)
 @click.option('--axis', default=None, type=int)

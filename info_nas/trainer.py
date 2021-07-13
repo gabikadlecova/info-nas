@@ -35,10 +35,14 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
     # init dataset
     train_dataset, valid_labeled, valid_labeled_orig, valid_unlabeled = get_train_valid_datasets(
-        labeled, unlabeled, batch_size=batch_size, labeled_transforms=transforms,
+        labeled, unlabeled, batch_size=batch_size, labeled_transforms=transforms, val_batch_size=batch_size,
         labeled_val_transforms=valid_transforms, **model_config['dataset_config']
     )
     dataset_len = len(train_dataset)
+    # precompute validation len
+    n_valid_labeled_orig = 0
+    for _ in valid_labeled_orig:
+        n_valid_labeled_orig += 1
 
     # init models
     if not labeled['train']['use_reference']:
@@ -68,6 +72,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
     for epoch in range(epochs):
         model.train()
         model_labeled.train()
+        if use_reference_model:
+            model_ref.train()
 
         n_labeled_batches, n_unlabeled_batches = 0, 0
         loss_lists_epoch = init_stats_dict('loss')
@@ -114,7 +120,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
         # epoch stats
         eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                   device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig(), config, loss_func_labeled,
+                   device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_func_labeled,
                    verbose=verbose)
 
         make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0

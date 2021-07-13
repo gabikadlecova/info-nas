@@ -12,9 +12,9 @@ def _metrics_list(res_dict, key):
     return res_dict.setdefault(key, [])
 
 
-def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2, n_validation=None):
+def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
     val_stats = eval_validation_accuracy(
-        mod, valid_set, config=config, device=device, n_validation=n_validation
+        mod, valid_set, config=config, device=device,
     )
 
     stats_names = ['acc_ops_val', 'mean_corr_adj_val', 'mean_fal_pos_adj_val', 'acc_adj_val']
@@ -52,6 +52,10 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled):
 
 def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
                nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_labeled, verbose=2):
+    model.eval()
+    model_labeled.eval()
+    if model_reference is not None:
+        model_reference.eval()
 
     model_map = {
         'labeled': model_labeled,
@@ -91,17 +95,14 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
             # evaluate reconstruction accuracy on labeled batches using unlabeled (original) model
             val_set = valid_labeled_orig
-            n_validation = len(valid_labeled)
             m = model_map['unlabeled']
         else:
             val_set = valid_unlabeled
-            n_validation = len(valid_unlabeled)
 
         # common for all models
         if verbose > 1:
             print(f"Validation accuracy of the network - {m_name}:")
-        eval_vae_validation(m, val_set, metrics_res_dict[m_name], device, config, verbose=verbose,
-                            n_validation=n_validation)
+        eval_vae_validation(m, val_set, metrics_res_dict[m_name], device, config, verbose=verbose)
 
     # TODO split this eval func
 

@@ -107,10 +107,10 @@ class Scaler:
 
         if self.normalize:
             mu, std = scales['mean'], scales['std']
-            item['output'] = (output - mu) / std
+            item['output'] = (output - mu) / (std + np.finfo(np.float32).eps)
         else:
             omax = scales['max']
-            item['output'] = output / omax
+            item['output'] = output / (omax + np.finfo(np.float32).eps)
 
         return item
 

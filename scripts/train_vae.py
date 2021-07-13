@@ -7,6 +7,7 @@ import click
 import torch
 import torchvision
 
+from info_nas.config import load_json_cfg
 from info_nas.datasets.io.transforms import Scaler, IncludeBias, SortByWeights, ToTuple
 
 from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
@@ -83,6 +84,12 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
     checkpoint_path = os.path.join(checkpoint_path, timestamp)
     os.mkdir(checkpoint_path)
 
+    if model_cfg is not None:
+        model_cfg = load_json_cfg(model_cfg)
+        config_path = os.path.join(checkpoint_path, 'config.json')
+        with open(config_path, 'w+') as f:
+            json.dump(model_cfg, f)
+
     model, metrics, loss = train(labeled, unlabeled, nb, transforms=transforms, valid_transforms=val_transforms,
                                  checkpoint_dir=checkpoint_path, device=device, use_reference_model=use_ref,
                                  batch_len_labeled=4, model_config=model_cfg,
@@ -93,11 +100,6 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
 
     with open(os.path.join(checkpoint_path, 'losses.pickle'), 'wb') as f:
         pickle.dump(loss, f)
-
-    if model_cfg is not None:
-        config_path = os.path.join(checkpoint_path, 'config.json')
-        with open(config_path, 'w+') as f:
-            json.dump(model_cfg, f)
 
     # TODO deterministic etc
 
