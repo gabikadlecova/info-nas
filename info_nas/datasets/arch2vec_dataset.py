@@ -38,19 +38,16 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
 
     print('Processing labeled nets for the training set...')
-    # networks from train set
-    train_labeled = _create_or_load_labeled(nasbench, dataset, train_pretrained, train_labeled_path,
-                                            seed=seed, device=device, config=config)
+    train_labeled, _ = prepare_labeled_dataset(train_labeled_path, nasbench, nb_dataset=nb_dataset, key="train",
+                                               remove_labeled=remove_labeled, dataset=dataset,
+                                               pretrained_path=train_pretrained,
+                                               seed=seed, device=device, config=config)
 
     print('Processing labeled nets for the validation set...')
-    # networks from valid set
-    valid_labeled = _create_or_load_labeled(nasbench, dataset, valid_pretrained, valid_labeled_path,
-                                            seed=seed, device=device, config=config)
-
-    # remove labeled nets from unlabeled dataset, get network metadata
-    # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
-    nb_dataset["train"] = _sync_labeled_unlabeled(train_labeled, nb_dataset["train"], remove_labeled=remove_labeled)
-    nb_dataset["val"] = _sync_labeled_unlabeled(valid_labeled, nb_dataset["val"], remove_labeled=remove_labeled)
+    valid_labeled, _ = prepare_labeled_dataset(valid_labeled_path, nasbench, nb_dataset=nb_dataset, key="val",
+                                               remove_labeled=remove_labeled, dataset=dataset,
+                                               pretrained_path=valid_pretrained,
+                                               seed=seed, device=device, config=config)
 
     labeled_dataset = {
         "train": train_labeled,
@@ -58,6 +55,25 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
     }
 
     return labeled_dataset, nb_dataset
+
+
+def prepare_labeled_dataset(labeled_path, nasbench, nb_dataset='../data/nb_dataset.json', key="train",
+                            remove_labeled=True, dataset='../data/cifar/', pretrained_path=None,
+                            seed=1, device=None, config=None):
+    if config is None:
+        config = local_dataset_cfg
+
+    if isinstance(nb_dataset, str):
+        nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
+
+    labeled = _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, seed=seed, device=device,
+                                      config=config)
+
+    # remove labeled nets from unlabeled dataset, get network metadata
+    # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
+    nb_dataset[key] = _sync_labeled_unlabeled(labeled, nb_dataset[key], remove_labeled=remove_labeled)
+
+    return labeled, nb_dataset
 
 
 def split_to_labeled(dataset, seed=1, percent_labeled=0.01):

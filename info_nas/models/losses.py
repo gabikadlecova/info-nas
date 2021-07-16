@@ -1,19 +1,23 @@
 import torch.nn as nn
 
 
-class WeightedMSELoss(nn.Module):
-    def __init__(self, alpha):
+class WeightedLoss(nn.Module):
+    def __init__(self, alpha, loss='L1'):
         super().__init__()
         self.alpha = alpha
-        self.mse = nn.MSELoss()
+
+        if loss == 'weighted':
+            raise ValueError("Cannot nest weighted loss.")
+        
+        self.loss = losses_dict[loss]()
 
     def forward(self, inputs, targets):
-        return self.alpha * self.mse.forward(inputs, targets)
+        return self.alpha * self.loss.forward(inputs, targets)
 
 
 losses_dict = {
-    'MSE_weighted': WeightedMSELoss,
-    'MSE': nn.MSELoss(),  # TODO call it in trainer (along with loss kwargs)
-    'L1': nn.L1Loss(),
-    'Huber': nn.SmoothL1Loss()
+    'weighted': WeightedLoss,
+    'MSE': nn.MSELoss,
+    'L1': nn.L1Loss,
+    'Huber': nn.SmoothL1Loss
 }

@@ -37,6 +37,8 @@ local_model_cfg = {
     },
     'out_channels': 513,
     'loss': 'MSE',
+    'loss_kwargs': {},
+    'loss_vae_weight': 1.0,
     'checkpoint': 5,
     'dataset_config': {
         'k': 20,

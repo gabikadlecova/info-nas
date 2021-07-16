@@ -3,21 +3,25 @@
     "model_kwargs": {
         "n_steps": 2,
         "n_convs": 2,
-        "activation": "linear",
-        "dropout": 0.5
+        "n_dense": 2,
+        "activation": "linear"
     },
     "optimizer": {
         "name": "Adam",
-        "lr": 1e-4
+        "lr": 1e-4,
+        "betas": [0.9, 0.999],
+        "eps": 1e-08
     },
     "out_channels": 513,
-    "loss": "MSE",
+    "loss": "L1",
+    "loss_kwargs": {},
+    "loss_vae_weight": 1e-4,
     "checkpoint": 5,
     "dataset_config": {
-        "k": 40,
-        "repeat_unlabeled": 3,
+        "k": 60,
+        "repeat_unlabeled": 1,
         "n_workers": 4,
-        "n_valid_workers": 4
+        "n_valid_workers": 0
     },
     "arch2vec_config": 4
 }

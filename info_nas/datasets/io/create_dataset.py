@@ -18,7 +18,8 @@ def _list_net_dir(net_dir: str):
     return [os.path.join(net_dir, n) for n in net_paths]
 
 
-def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, device=None, **kwargs):
+def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, device=None,
+                            use_test_data=False, **kwargs):
     # pretrained networks in a folder
     if isinstance(net_dir, str):
         net_paths = _list_net_dir(net_dir)
@@ -30,15 +31,21 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
 
     networks = (load_trained_net(net_path, nasbench, device=device) for net_path in net_paths)
 
-    data = create_io_dataset(networks, dataset, device=device, **kwargs)
+    data = create_io_dataset(networks, dataset, device=device, use_test_data=use_test_data, **kwargs)
     torch.save(data, save_path)
 
     return data
 
 
-def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20):
+def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20,
+                      use_test_data=False):
 
-    _, _, valid_loader, validation_size, _, _ = dataset
+    _, _, valid_loader, validation_size, test_loader, test_size = dataset
+    # test dataset
+    if use_test_data:
+        valid_loader = test_loader
+        validation_size = test_size
+
     loaded_dataset = [b for b in valid_loader]
 
     net_repo = {}

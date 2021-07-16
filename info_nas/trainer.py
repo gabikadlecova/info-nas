@@ -63,7 +63,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
     # init losses and logs
     loss_func_vae = VAEReconstructed_Loss(**config['loss'])
-    loss_func_labeled = losses_dict[model_config['loss']]
+    loss_func_labeled = losses_dict[model_config['loss']](**model_config['loss_kwargs'])
+    weight_vae = model_config['loss_vae_weight']  # VAE loss weight for labeled data (labeled loss unweighted)
 
     # stats for all three model variants (labeled, unlabeled, reference)
     loss_lists_total = init_stats_dict('loss')
@@ -82,29 +83,21 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
         for i, batch in enumerate(train_dataset):
             # determine if labeled/unlabeled batch
             if len(batch) == 2:
-                extended_model = model
-                extended_optim = optimizer
-                loss_list = loss_lists_epoch['unlabeled']
-                Z_list = Z['unlabeled']
-                is_labeled = False
-
+                _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled,
+                                loss_lists_epoch['unlabeled'], Z['unlabeled'], eval_labeled=False)
                 n_unlabeled_batches += 1
 
             elif len(batch) == batch_len_labeled:
-                extended_model = model_labeled
-                extended_optim = optimizer_labeled
-                loss_list = loss_lists_epoch['labeled']
-                Z_list = Z['labeled']
-                is_labeled = True
-
+                _train_on_batch(model_labeled, batch, optimizer_labeled, device, config, loss_func_vae,
+                                loss_func_labeled, loss_lists_epoch['labeled'], Z['labeled'],
+                                loss_vae_weight=weight_vae, eval_labeled=True)
                 n_labeled_batches += 1
+
             else:
                 raise ValueError(f"Invalid dataset - batch has {len(batch)} items, supported is 2 or "
                                  f"{batch_len_labeled}.")
 
-            # train models
-            _train_on_batch(extended_model, batch, extended_optim, device, config, loss_func_vae, loss_func_labeled,
-                            loss_list, Z_list, eval_labeled=is_labeled)
+            # train reference on unlabeled
             if use_reference_model:
                 _train_on_batch(model_ref, batch, optimizer_ref, device, config, loss_func_vae, loss_func_labeled,
                                 loss_lists_epoch['reference'], Z['reference'], eval_labeled=False)
@@ -123,25 +116,29 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
                    device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_func_labeled,
                    verbose=verbose)
 
-        make_checkpoint = 'checkpoint' in model_config and epoch % model_config['checkpoint'] == 0
-        if epoch == epochs - 1 or make_checkpoint:
-            checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir)
+        checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir)
 
+        # save network checkpoints
+        make_checkpoint = 'checkpoint' in model_config and (epoch + 1) % model_config['checkpoint'] == 0
+        if epoch == epochs - 1 or make_checkpoint:
+            # save labeled/unlabeled models
             save_extended_vae(checkpoint_dir, model_labeled, optimizer_labeled, epoch,
                               model_config['model_class'], model_config['model_kwargs'])
-
-            # keep the original function signature, save what I need
-            orig_path = os.path.join(checkpoint_dir, f"model_orig_epoch-{epoch}.pt")
-            save_checkpoint_vae(model, optimizer, epoch, None, None, None, None, None, f_path=orig_path)
+            _save_arch2vec_model(model, optimizer, checkpoint_dir, 'orig', epoch)
 
             if use_reference_model:
-                orig_path = os.path.join(checkpoint_dir, f"model_ref_epoch-{epoch}.pt")
-                save_checkpoint_vae(model_ref, optimizer_ref, epoch, None, None, None, None, None, f_path=orig_path)
+                _save_arch2vec_model(model_ref, optimizer_ref, checkpoint_dir, 'ref', epoch)
 
         # TODO tensorboard?
 
     # TODO lepší zaznamenání výsledků
     return model_labeled, metrics_total, loss_lists_total
+
+
+def _save_arch2vec_model(model, optimizer, checkpoint_dir, model_type, epoch):
+    # keep the original function signature, save what I need
+    orig_path = os.path.join(checkpoint_dir, f"model_{model_type}_epoch-{epoch}.pt")
+    save_checkpoint_vae(model, optimizer, epoch, None, None, None, None, None, f_path=orig_path)
 
 
 def _initialize_labeled_model(model, in_channels, model_config=None, device=None):
@@ -168,7 +165,7 @@ def _forward_batch(model, adj, ops, inputs=None):
     return model_out
 
 
-def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_history, outputs=None):
+def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_history, loss_vae_weight=1.0, outputs=None):
     ops_recon, adj_recon, mu, logvar = model_out[:4]
 
     adj_recon, ops_recon = prep_reverse(adj_recon, ops_recon)
@@ -183,6 +180,7 @@ def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_hist
         labeled_out = None
 
     vae_out = loss((ops_recon, adj_recon), (ops, adj), mu, logvar)
+    vae_out = loss_vae_weight * vae_out
     total_out = vae_out + labeled_out if labeled_out is not None else vae_out
 
     loss_history['total'].append(total_out.item())
@@ -194,7 +192,7 @@ def _eval_batch(model_out, adj, ops, prep_reverse, loss, loss_labeled, loss_hist
 
 
 def _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss_func_labeled, loss_list, Z,
-                    eval_labeled=False):
+                    loss_vae_weight=1.0, eval_labeled=False):
 
     optimizer.zero_grad()
 
@@ -215,7 +213,7 @@ def _train_on_batch(model, batch, optimizer, device, config, loss_func_vae, loss
     Z.append(mu.cpu())
 
     loss_out = _eval_batch(model_out, adj, ops, prep_reverse, loss_func_vae, loss_func_labeled,
-                           loss_list, outputs=outputs)
+                           loss_list, loss_vae_weight=loss_vae_weight, outputs=outputs)
 
     loss_out.backward()
 
