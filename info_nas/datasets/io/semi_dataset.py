@@ -6,8 +6,8 @@ import torch
 import torch.utils.data
 
 
-def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_size=32, n_workers=0, shuffle=True,
-                             val_batch_size=100, n_valid_workers=0, labeled_transforms=None,
+def get_train_valid_datasets(labeled, unlabeled, k=1, coef_k=1.0, repeat_unlabeled=1, batch_size=32, n_workers=0,
+                             shuffle=True, val_batch_size=100, n_valid_workers=0, labeled_transforms=None,
                              labeled_val_transforms=None, **kwargs):
 
     train_labeled = labeled_network_dataset(labeled['train'], transforms=labeled_transforms)
@@ -17,8 +17,8 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, repeat_unlabeled=1, batch_
     valid_unlabeled = unlabeled_network_dataset(unlabeled['val'])
 
     n_labeled = len(labeled['train']['net_repo'])
-    train_dataset = SemiSupervisedDataset(train_labeled, train_unlabeled, n_labeled, k=k, batch_size=batch_size,
-                                          repeat_unlabeled=repeat_unlabeled, n_workers=n_workers,
+    train_dataset = SemiSupervisedDataset(train_labeled, train_unlabeled, n_labeled, k=k, coef_k=coef_k,
+                                          batch_size=batch_size, repeat_unlabeled=repeat_unlabeled, n_workers=n_workers,
                                           shuffle=shuffle, **kwargs)
 
     valid_labeled_dataset = torch.utils.data.DataLoader(valid_labeled, batch_size=val_batch_size,
@@ -189,7 +189,7 @@ class UniqueValidationNets:
 
 
 class SemiSupervisedDataset:
-    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, batch_size=32, n_workers=0, shuffle=True,
+    def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, coef_k=1.0, batch_size=32, n_workers=0, shuffle=True,
                  repeat_unlabeled=1, **kwargs):
         self.n, self.n_labeled, self.n_unlabeled = 0, 0, 0
 
@@ -217,7 +217,7 @@ class SemiSupervisedDataset:
 
         self.k = k
 
-        self.labeled_coef = n_unlabeled_nets // n_labeled_nets
+        self.labeled_coef = coef_k * n_unlabeled_nets // n_labeled_nets
         assert self.labeled_coef >= 1, f"There cannot be more labeled nets than unlabeled " \
                                        f"({n_labeled_nets} vs {n_unlabeled_nets})."
 

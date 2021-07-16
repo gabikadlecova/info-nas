@@ -8,7 +8,7 @@ class WeightedLoss(nn.Module):
 
         if loss == 'weighted':
             raise ValueError("Cannot nest weighted loss.")
-        
+
         self.loss = losses_dict[loss]()
 
     def forward(self, inputs, targets):

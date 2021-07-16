@@ -99,8 +99,10 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
             # train reference on unlabeled
             if use_reference_model:
+                ref_weight = 1.0 if len(batch) == 2 else weight_vae  # reference model is trained on all batches
                 _train_on_batch(model_ref, batch, optimizer_ref, device, config, loss_func_vae, loss_func_labeled,
-                                loss_lists_epoch['reference'], Z['reference'], eval_labeled=False)
+                                loss_lists_epoch['reference'], Z['reference'],
+                                loss_vae_weight=ref_weight, eval_labeled=False)
 
             # batch stats
             if verbose > 0 and i % print_frequency == 0:

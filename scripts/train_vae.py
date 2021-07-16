@@ -8,7 +8,7 @@ import torch
 import torchvision
 
 from info_nas.config import load_json_cfg
-from info_nas.datasets.io.transforms import Scaler, IncludeBias, SortByWeights, ToTuple
+from info_nas.datasets.io.transforms import Scaler, IncludeBias, SortByWeights, ToTuple, load_scaler, after_scale_path
 
 from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
 from nasbench import api
@@ -16,23 +16,19 @@ from nasbench import api
 from info_nas.trainer import train
 
 
-def get_transforms(scale_path, include_bias, axis, normalize):
+def get_transforms(scale_path, include_bias, axis, normalize, scale_whole=False, axis_whole=None):
     transforms = []
 
     if include_bias:
         assert 'include_bias' in scale_path
         transforms.append(IncludeBias())
 
-    # load scaler
-    per_label = 'per_label' in scale_path
-    if axis is not None:
-        assert f'axis_{axis}.' in scale_path
-
-    scaler = Scaler(normalize=normalize, per_label=per_label, axis=axis)
-    scaler.load_fit(scale_path)
+    scaler = load_scaler(scale_path, normalize, axis, include_bias)
     transforms.append(scaler)
 
-    transforms.append(SortByWeights())
+    whole_path = after_scale_path(scale_path, axis_whole) if scale_whole else None
+
+    transforms.append(SortByWeights(after_sort_scale=whole_path))
     transforms.append(ToTuple())
     transforms = torchvision.transforms.Compose(transforms)
 
@@ -52,13 +48,15 @@ def get_transforms(scale_path, include_bias, axis, normalize):
 @click.option('--include_bias/--no_bias', default=True)
 @click.option('--normalize/--minmax', default=True)
 @click.option('--axis', default=None, type=int)
+@click.option('--after_axis', default=None, type=int)
+@click.option('--scale_whole/--no_scale_whole', default=False)
 @click.option('--use_ref/--no_ref', default=False)
 @click.option('--device', default='cuda')
 @click.option('--seed', default=1)
 @click.option('--batch_size', default=32)
 @click.option('--epochs', default=7)
 def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nasbench_path, model_cfg, include_bias,
-        normalize, axis, use_ref, device, seed, batch_size, epochs):
+        normalize, axis, after_axis, scale_whole, use_ref, device, seed, batch_size, epochs):
 
     if nasbench_path.endswith('.pickle'):
         with open(nasbench_path, 'rb') as f:
@@ -74,8 +72,10 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
                                                         train_labeled_path=train_path,
                                                         valid_labeled_path=valid_path)
 
-    transforms = get_transforms(scale_path, include_bias, axis, normalize)
-    val_transforms = get_transforms(scale_path_val, include_bias, axis, normalize)
+    transforms = get_transforms(scale_path, include_bias, axis, normalize,
+                                scale_whole=scale_whole, axis_whole=after_axis)
+    val_transforms = get_transforms(scale_path_val, include_bias, axis, normalize,
+                                    scale_whole=scale_whole, axis_whole=after_axis)
 
     timestamp = datetime.datetime.now().strftime('%Y-%d-%m_%H-%M-%S')
     if not os.path.exists(checkpoint_path):
@@ -88,7 +88,7 @@ def run(train_path, valid_path, scale_path, scale_path_val, checkpoint_path, nas
         model_cfg = load_json_cfg(model_cfg)
         config_path = os.path.join(checkpoint_path, 'config.json')
         with open(config_path, 'w+') as f:
-            json.dump(model_cfg, f)
+            json.dump(model_cfg, f, indent=4)
 
     model, metrics, loss = train(labeled, unlabeled, nb, transforms=transforms, valid_transforms=val_transforms,
                                  checkpoint_dir=checkpoint_path, device=device, use_reference_model=use_ref,
