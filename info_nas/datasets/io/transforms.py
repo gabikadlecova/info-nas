@@ -1,6 +1,26 @@
 import numpy as np
 import pickle
 import torch
+import torchvision
+
+
+def get_transforms(scale_path, include_bias, axis, normalize, scale_whole=False, axis_whole=None):
+    transforms = []
+
+    if include_bias:
+        assert 'include_bias' in scale_path
+        transforms.append(IncludeBias())
+
+    scaler = load_scaler(scale_path, normalize, axis, include_bias)
+    transforms.append(scaler)
+
+    whole_path = after_scale_path(scale_path, axis_whole) if scale_whole else None
+
+    transforms.append(SortByWeights(after_sort_scale=whole_path))
+    transforms.append(ToTuple())
+    transforms = torchvision.transforms.Compose(transforms)
+
+    return transforms
 
 
 def load_scaler(scale_path, normalize, axis, include_bias):

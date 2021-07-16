@@ -8,31 +8,14 @@ import torch
 import torchvision
 
 from info_nas.config import load_json_cfg
-from info_nas.datasets.io.transforms import Scaler, IncludeBias, SortByWeights, ToTuple, load_scaler, after_scale_path
+from info_nas.datasets.io.transforms import Scaler, IncludeBias, SortByWeights, ToTuple, load_scaler, after_scale_path, \
+    get_transforms
 
 from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
 from nasbench import api
 
 from info_nas.trainer import train
 
-
-def get_transforms(scale_path, include_bias, axis, normalize, scale_whole=False, axis_whole=None):
-    transforms = []
-
-    if include_bias:
-        assert 'include_bias' in scale_path
-        transforms.append(IncludeBias())
-
-    scaler = load_scaler(scale_path, normalize, axis, include_bias)
-    transforms.append(scaler)
-
-    whole_path = after_scale_path(scale_path, axis_whole) if scale_whole else None
-
-    transforms.append(SortByWeights(after_sort_scale=whole_path))
-    transforms.append(ToTuple())
-    transforms = torchvision.transforms.Compose(transforms)
-
-    return transforms
 
 #@click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
 
