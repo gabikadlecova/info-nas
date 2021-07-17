@@ -21,3 +21,8 @@ losses_dict = {
     'L1': nn.L1Loss,
     'Huber': nn.SmoothL1Loss
 }
+
+metrics_dict = {
+    'MSE': nn.MSELoss(),
+    'L1': nn.L1Loss()
+}

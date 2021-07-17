@@ -7,6 +7,8 @@ import torch
 from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing
 
+from info_nas.models.losses import metrics_dict
+
 
 def _metrics_list(res_dict, key):
     return res_dict.setdefault(key, [])
@@ -30,7 +32,9 @@ def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
 
 
 def eval_labeled_validation(model, validation, device, config, loss_labeled):
-    losses = []
+    loss_m = {"val_loss": []}
+    metrics = {k: [] for k in metrics_dict.keys()}
+    metrics = {**loss_m, **metrics}
 
     for batch in validation:
         adj, ops, inputs, outputs = batch[:4]
@@ -45,9 +49,18 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled):
         outs_recon = model_out[-1]
 
         labeled_out = loss_labeled(outs_recon, outputs)
-        losses.append(labeled_out.detach().item())
+        metrics["val_loss"].append(labeled_out.detach().item())
 
-    return np.mean(losses)
+        for metric_k, metric in metrics_dict.items():
+            metric_out = metric(outs_recon, outputs)
+            metrics[metric_k].append(metric_out.detach().item())
+
+    mean_metrics = {k: np.mean(m) for k, m in metrics.items()}
+    mean_metrics["val_loss_min"] = np.min(metrics["val_loss"])
+    mean_metrics["val_loss_max"] = np.max(metrics["val_loss"])
+    mean_metrics["val_loss_std"] = np.std(metrics["val_loss"])
+    mean_metrics["val_loss_median"] = np.median(metrics["val_loss"])
+    return mean_metrics
 
 
 def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
@@ -88,10 +101,11 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
         # labeled only eval
         if m_name == 'labeled':
-            val_loss = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled)
-            _metrics_list(metrics_res_dict[m_name], 'val_loss').append(val_loss)
-            if verbose > 1:
-                print(f"Validation labeled loss: {val_loss}")
+            val_metrics = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled)
+            for val_m_name, val_m_loss in val_metrics.items():
+                _metrics_list(metrics_res_dict[m_name], val_m_name).append(val_m_loss)
+                if verbose > 1:
+                    print(f"Validation labeled - {val_m_name}: {val_m_loss}")
 
             # evaluate reconstruction accuracy on labeled batches using unlabeled (original) model
             val_set = valid_labeled_orig

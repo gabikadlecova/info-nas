@@ -3,6 +3,7 @@ import pickle
 import click
 import numpy as np
 import torch
+import torch.utils.data
 
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
@@ -55,6 +56,9 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, c
     dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)
     dataset = labeled_network_dataset(dataset, transforms=transforms)
 
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=scale_name == "train",
+                                              num_workers=0)
+
     print("Loading output dataset...")
     out_data = []
     for i, item in enumerate(dataset):
@@ -77,9 +81,8 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, c
 
     losses = {k: v() for k, v in losses_dict.items() if k != 'weighted'}
 
-    for i in range(len(out_data) // batch_size):
-        data = out_data[i:i + batch_size]
-        data = torch.Tensor(data)
+    for batch in data_loader:
+        data = batch[3]
 
         if len(data) < batch_size:
             mean_stats = mean_stats[:len(data)]

@@ -8,3 +8,6 @@
 #   - get checkpoint dir, save there the result as well
 #   - load model checkpoint
 #   - eval it on the dataset
+
+
+
