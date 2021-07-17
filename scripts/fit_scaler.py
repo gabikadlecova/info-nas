@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from info_nas.datasets.io.transforms import Scaler
+from info_nas.datasets.io.transforms import Scaler, get_scale_path
 from info_nas.datasets.io.create_dataset import load_io_dataset
 
 
@@ -21,12 +21,7 @@ def main(scale_name, dataset, scale_save_dir, per_label, weighted, axis, include
     if not os.path.exists(scale_save_dir):
         os.mkdir(scale_save_dir)
 
-    scale_save_path = os.path.join(scale_save_dir,
-                                   f"scale-{scale_name}"
-                                   f"{'-include_bias' if include_bias else ''}"
-                                   f"{'-per_label' if per_label else ''}"
-                                   f"{'-weighted' if weighted else ''}"
-                                   f"{'-axis_' + str(axis) if axis is not None else ''}.pickle")
+    scale_save_path = get_scale_path(scale_save_dir, scale_name, include_bias, per_label, weighted, axis)
 
     outputs = dataset['outputs'].numpy()
     if include_bias:

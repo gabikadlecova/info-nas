@@ -35,6 +35,15 @@ local_model_cfg = {
         'betas': (0.9, 0.999),
         'eps': 1e-08
     },
+    'scale': {
+        'include_bias': True,
+        'axis': 0,
+        'after_axis': 0,
+        'normalize': True,
+        'weighted': True,
+        'per_label': False,
+        'scale_whole': True
+    },
     'out_channels': 513,
     'loss': 'MSE',
     'loss_kwargs': {},

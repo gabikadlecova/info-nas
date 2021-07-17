@@ -6,27 +6,22 @@ import torch
 
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
-from info_nas.datasets.io.transforms import get_transforms
+from info_nas.datasets.io.transforms import get_transforms, get_all_scales
 from info_nas.models.losses import losses_dict
 from nasbench import api
 
-from info_nas.config import local_dataset_cfg
+from info_nas.config import local_dataset_cfg, load_json_cfg
 
 
 @click.command()
 @click.argument('scale_name')
-@click.argument('scale_path')
 @click.option('--dataset', default='../data/train_labeled.pt')
+@click.option('--scale_dir', default='../data/scales/')
+@click.option('--scale_cfg', default='../configs/scale_test_config.json')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
-@click.option('--axis', default=None, type=int)
-@click.option('--axis_after', default=None, type=int)
-@click.option('--batch_size', default=32, type=int)
-@click.option('--normalize/--minmax', default=True)
-@click.option('--include_bias/--no_bias', default=True)
-@click.option('--scale_whole/--no_scale_whole', default=False)
+@click.option('--batch_size', default=32)
 @click.option('--config', default=None)
-def main(scale_name, scale_path, dataset, nasbench_path, axis, axis_after, batch_size, normalize, include_bias,
-         scale_whole, config):
+def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, config):
 
     if nasbench_path.endswith('.pickle'):
         with open(nasbench_path, 'rb') as f:
@@ -37,8 +32,24 @@ def main(scale_name, scale_path, dataset, nasbench_path, axis, axis_after, batch
     if config is None:
         config = local_dataset_cfg
 
-    transforms = get_transforms(scale_path, include_bias, axis, normalize,
-                                scale_whole=scale_whole, axis_whole=axis_after)
+    scale_cfg = load_json_cfg(scale_cfg)
+
+    # load all scaling
+    scale_config = scale_cfg["scale"]
+    include_bias = scale_config["include_bias"]
+    normalize = scale_config["normalize"]
+    multiply_by_weights = scale_config["multiply_by_weights"]
+    use_scale_whole = scale_config["scale_whole"]
+
+    for k, v in scale_config.items():
+        print(f"{k}: {v}")
+
+    scale_train, scale_valid, scale_whole = get_all_scales(scale_dir, scale_config)
+    scale_whole = scale_whole if use_scale_whole else None
+    print(f"Scale paths: {scale_train}, {scale_valid}, {scale_whole}")
+
+    transforms = get_transforms(scale_train if scale_name == "train" else scale_valid, include_bias, normalize,
+                                multiply_by_weights, scale_whole_path=scale_whole)
 
     key = 'val' if scale_name == 'valid' else scale_name
     dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)

@@ -1,0 +1,12 @@
+{
+    "scale": {
+        "include_bias": true,
+        "axis": null,
+        "after_axis": 0,
+        "normalize": true,
+        "weighted": false,
+        "per_label": false,
+        "multiply_by_weights": true,
+        "scale_whole": true
+    }
+}

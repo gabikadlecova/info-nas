@@ -1,41 +1,61 @@
+import os
+
 import numpy as np
 import pickle
 import torch
 import torchvision
 
 
-def get_transforms(scale_path, include_bias, axis, normalize, scale_whole=False, axis_whole=None):
+def get_transforms(scale_path, include_bias, normalize, multiply_by_weights, scale_whole_path=False):
     transforms = []
 
     if include_bias:
         assert 'include_bias' in scale_path
         transforms.append(IncludeBias())
 
-    scaler = load_scaler(scale_path, normalize, axis, include_bias)
+    scaler = load_scaler(scale_path, normalize, include_bias, multiply_by_weights)
     transforms.append(scaler)
 
-    whole_path = after_scale_path(scale_path, axis_whole) if scale_whole else None
-
-    transforms.append(SortByWeights(after_sort_scale=whole_path))
+    transforms.append(SortByWeights(after_sort_scale=scale_whole_path))
     transforms.append(ToTuple())
     transforms = torchvision.transforms.Compose(transforms)
 
     return transforms
 
 
-def load_scaler(scale_path, normalize, axis, include_bias):
+def load_scaler(scale_path, normalize, include_bias, multiply_by_weights):
     per_label = 'per_label' in scale_path
     weighted = 'weighted' in scale_path
-    if axis is not None:
-        assert f'axis_{axis}.' in scale_path
 
-    scaler = Scaler(normalize=normalize, per_label=per_label, axis=axis, weighted=weighted, include_bias=include_bias)
+    scaler = Scaler(normalize=normalize, per_label=per_label, weighted=weighted, include_bias=include_bias,
+                    mult_by_weights=multiply_by_weights)
     scaler.load_fit(scale_path)
     return scaler
 
 
 def after_scale_path(scale_path, axis):
     return scale_path.replace('scale-', f"whole_scale{'-axis_' + str(axis) if axis is not None else ''}-")
+
+
+def get_scale_path(scale_dir, scale_name, include_bias, per_label, weighted, axis):
+    return os.path.join(scale_dir,
+                        f"scale-{scale_name}"
+                        f"{'-include_bias' if include_bias else ''}"
+                        f"{'-per_label' if per_label else ''}"
+                        f"{'-weighted' if weighted else ''}"
+                        f"{'-axis_' + str(axis) if axis is not None else ''}.pickle")
+
+
+def get_all_scales(scale_dir, scale_config):
+    scale_args = [scale_config["include_bias"], scale_config['per_label'], scale_config['weighted'],
+                  scale_config['axis']]
+
+    scale_train = get_scale_path(scale_dir, "train", *scale_args)
+    scale_valid = get_scale_path(scale_dir, "valid", *scale_args)
+
+    scale_whole = after_scale_path(scale_train, scale_config['after_axis'])
+
+    return scale_train, scale_valid, scale_whole
 
 
 class IncludeBias:
@@ -90,16 +110,17 @@ class SortByWeights:
 
 
 class Scaler:
-    def __init__(self, net_scales=None, per_label=False, normalize=False, axis=None, weighted=False, include_bias=True):
+    def __init__(self, net_scales=None, per_label=False, normalize=False, axis=None, mult_by_weights=True,
+                 weighted=False, include_bias=True):
+
         self.per_label = per_label
         self.normalize = normalize
         self.axis = axis
 
         self.include_bias = include_bias
 
-        if weighted and not per_label:
-            raise ValueError("Normalizing weighted data is supported only for per_label = True.")
         self.weighted = weighted
+        self.mult_by_weights = mult_by_weights
 
         self.net_scales = net_scales
 
@@ -117,8 +138,8 @@ class Scaler:
 
     def _fit_scales(self, outputs, hashes, labels=None, net_repo=None):
 
-        if self.per_label:
-            assert labels is not None, "Must provide labels if per_label=True."
+        if self.per_label or self.weighted:
+            assert labels is not None, "Must provide labels if per_label=True or weighted=True."
             if self.weighted:
                 assert net_repo is not None, "Must provide weights in net repo if weighted=True."
 
@@ -127,15 +148,15 @@ class Scaler:
             for label in np.unique(labels):
                 labelmap = labels == label
 
-                label_hashes = hashes[labelmap]
-                label_vals = outputs[labelmap]
+                label_hashes = hashes[labelmap] if self.per_label else hashes
+                label_vals = outputs[labelmap] if self.per_label else outputs
 
                 fit_dict[label] = self._get_scales_per_hash(label_vals, label_hashes, net_repo=net_repo,
                                                             weight_label=label)
 
             return fit_dict
 
-        return self._get_scales_per_hash(outputs, hashes)
+        return self._get_scales_per_hash(outputs, hashes, net_repo=net_repo)
 
     def _get_scales_per_hash(self, values, hashes, net_repo=None, weight_label=None):
         scales = {}
@@ -172,10 +193,10 @@ class Scaler:
         output = item['output']
         label = item['label'].item()
 
-        if self.weighted:
+        if self.mult_by_weights:
             output *= self._get_weights(item, label)
 
-        scales = self.net_scales[net_hash] if not self.per_label else self.net_scales[label][net_hash]
+        scales = self.net_scales[label][net_hash] if self.per_label or self.weighted else self.net_scales[net_hash]
 
         if self.normalize:
             mu, std = scales['mean'], scales['std']
