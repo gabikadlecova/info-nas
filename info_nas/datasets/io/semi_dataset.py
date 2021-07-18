@@ -28,6 +28,14 @@ def get_train_valid_datasets(labeled, unlabeled, k=1, coef_k=1.0, repeat_unlabel
 
     valid_labeled_unique = UniqueValidationNets(valid_labeled, batch_size=val_batch_size)
 
+    # quick hack for two valid sets
+    if labeled['valid_unseen_train'] is not None:
+        valid_unseen = labeled_network_dataset(labeled['valid_unseen_train'], transforms=labeled_transforms)
+        valid_unseen = torch.utils.data.DataLoader(valid_unseen, batch_size=val_batch_size,
+                                                   num_workers=0, **kwargs)
+
+        valid_labeled_dataset = {'valid_unseen_networks': valid_labeled_dataset, 'valid_unseen_images': valid_unseen}
+
     return train_dataset, valid_labeled_dataset, valid_labeled_unique, valid_unlabeled_dataset
 
 

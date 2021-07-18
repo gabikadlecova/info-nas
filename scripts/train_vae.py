@@ -20,17 +20,19 @@ from info_nas.trainer import train
 @click.command()
 @click.option('--train_path', default='../data/train_long.pt')
 @click.option('--valid_path', default='../data/valid_long.pt')
+@click.option('--unseen_valid_path', default='../data/test_train_long.pt')
 @click.option('--scale_dir', default='../data/scales/')
 @click.option('--checkpoint_path', default='../data/vae_checkpoints/')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
 @click.option('--model_cfg', default=None)
 @click.option('--use_ref/--no_ref', default=False)
+@click.option('--use_unseen_data/--no_unseen_data', default=False)
 @click.option('--device', default='cuda')
 @click.option('--seed', default=1)
 @click.option('--batch_size', default=32)
 @click.option('--epochs', default=7)
-def run(train_path, valid_path, scale_dir, checkpoint_path, nasbench_path, model_cfg, use_ref,
-        device, seed, batch_size, epochs):
+def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, model_cfg, use_ref,
+        use_unseen_data, device, seed, batch_size, epochs):
 
     # load datasets
     if nasbench_path.endswith('.pickle'):
@@ -45,12 +47,14 @@ def run(train_path, valid_path, scale_dir, checkpoint_path, nasbench_path, model
         model_cfg = local_model_cfg
 
     device = torch.device(device)
+    unseen_valid_path = unseen_valid_path if use_unseen_data else None
 
     labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=seed,
                                                         train_pretrained=None,
                                                         valid_pretrained=None,
                                                         train_labeled_path=train_path,
-                                                        valid_labeled_path=valid_path)
+                                                        valid_labeled_path=valid_path,
+                                                        test_labeled_train_path=unseen_valid_path)
 
     # load all scaling
     scale_config = model_cfg["scale"]

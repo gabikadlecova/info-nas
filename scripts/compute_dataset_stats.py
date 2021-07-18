@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.utils.data
 
-from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
+from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset, split_off_valid
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
 from info_nas.datasets.io.transforms import get_transforms, get_all_scales
 from info_nas.models.losses import losses_dict
@@ -21,8 +21,9 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 @click.option('--scale_cfg', default='../configs/scale_test_config.json')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
 @click.option('--batch_size', default=32)
+@click.option('--split_ratio', default=None, type=float)
 @click.option('--config', default=None)
-def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, config):
+def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, split_ratio, config):
 
     if nasbench_path.endswith('.pickle'):
         with open(nasbench_path, 'rb') as f:
@@ -54,6 +55,9 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, c
 
     key = 'val' if scale_name == 'valid' else scale_name
     dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)
+    if split_ratio is not None:
+        _, dataset = split_off_valid(dataset, ratio=split_ratio)
+
     dataset = labeled_network_dataset(dataset, transforms=transforms)
 
     data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=scale_name == "train",

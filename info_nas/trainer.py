@@ -1,5 +1,6 @@
 # TODO napsat že source je arch2vec s úpravama víceméně
 import os
+import time
 
 import numpy as np
 import random
@@ -69,6 +70,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
     # stats for all three model variants (labeled, unlabeled, reference)
     loss_lists_total = init_stats_dict('loss')
     metrics_total = init_stats_dict('metrics')
+    metrics_total['running_time'] = []
+    start_time = time.process_time()
 
     for epoch in range(epochs):
         model.train()
@@ -117,6 +120,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
         eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
                    device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_func_labeled,
                    verbose=verbose)
+
+        metrics_total['running_time'].append(time.process_time() - start_time)
 
         checkpoint_metrics_losses(metrics_total, loss_lists_total, checkpoint_dir)
 

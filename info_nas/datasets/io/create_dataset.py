@@ -38,15 +38,17 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
 
 
 def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20,
-                      use_test_data=False):
+                      use_test_data=False, test_subset_size=20):
 
     _, _, valid_loader, validation_size, test_loader, test_size = dataset
     # test dataset
     if use_test_data:
-        valid_loader = test_loader
-        validation_size = test_size
+        validation_size = None
+        test_inds = np.random.choice(np.arange(len(test_loader)), size=test_subset_size, replace=False)
 
-    loaded_dataset = [b for b in valid_loader]
+        loaded_dataset = [b for i, b in enumerate(test_loader) if i in test_inds]
+    else:
+        loaded_dataset = [b for b in valid_loader]
 
     net_repo = {}
 

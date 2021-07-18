@@ -32,10 +32,27 @@ def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
 
 
 def eval_labeled_validation(model, validation, device, config, loss_labeled):
+    if isinstance(validation, dict):
+        # process multiple validation sets
+        res_dict = {}
+
+        for val_name, val_set in validation.items():
+            metrics = _eval_labeled_validation(model, val_set, device, config, loss_labeled)
+            metrics = {f"{val_name}-{k}": v for k, v in metrics.items()}
+            res_dict.update(metrics)
+
+        return res_dict
+    else:
+        # there is only one validation set
+        return _eval_labeled_validation(model, validation, device, config, loss_labeled)
+
+
+def _eval_labeled_validation(model, validation, device, config, loss_labeled):
     loss_m = {"val_loss": []}
     metrics = {k: [] for k in metrics_dict.keys()}
     metrics = {**loss_m, **metrics}
 
+    print(f"Evaluating model on labeled validation set ({len(validation)} batches).")
     for batch in validation:
         adj, ops, inputs, outputs = batch[:4]
         adj, ops = adj.to(device), ops.to(device)
@@ -133,8 +150,11 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 def checkpoint_metrics_losses(metrics, losses, save_dir):
     metrics_df = []
     for k, metric_list in metrics.items():
-        for m_name, m_vals in metric_list.items():
-            metrics_df.append([f"{k}_{m_name}", *m_vals])
+        if k == "running_time":
+            metrics_df.append(["running_time", *metric_list])
+        else:
+            for m_name, m_vals in metric_list.items():
+                metrics_df.append([f"{k}_{m_name}", *m_vals])
 
     metrics_df = pd.DataFrame(metrics_df).T
     metrics_df.columns = metrics_df.iloc[0]

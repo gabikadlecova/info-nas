@@ -26,6 +26,7 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                    valid_labeled_path='../data/valid_labeled.pt',
                                    train_pretrained='../data/train_checkpoints/',
                                    valid_pretrained='../data/valid_checkpoints/',
+                                   test_labeled_train_path=None, test_labeled_valid_path=None, test_valid_split=0.1,
                                    remove_labeled=True, device=None, config=None):
     # creates/loads both the original dataset and the labeled io dataset
 
@@ -37,11 +38,31 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
 
     nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
 
+    if test_labeled_train_path is not None:
+        print("Processing labeled test data - train.")
+        test_train_labeled, _ = prepare_labeled_dataset(test_labeled_train_path, nasbench, nb_dataset=nb_dataset,
+                                                        key="train", remove_labeled=False, use_test_set=True,
+                                                        pretrained_path=train_pretrained, dataset=dataset,
+                                                        seed=seed, device=device, config=config)
+        test_train_labeled, test_train_labeled_split = split_off_valid(test_train_labeled, ratio=test_valid_split)
+    else:
+        test_train_labeled = None
+        test_train_labeled_split = None
+
     print('Processing labeled nets for the training set...')
     train_labeled, _ = prepare_labeled_dataset(train_labeled_path, nasbench, nb_dataset=nb_dataset, key="train",
                                                remove_labeled=remove_labeled, dataset=dataset,
                                                pretrained_path=train_pretrained,
                                                seed=seed, device=device, config=config)
+
+    if test_labeled_valid_path is not None:
+        print("Processing labeled test data - valid.")
+        test_valid_labeled, _ = prepare_labeled_dataset(test_labeled_valid_path, nasbench, nb_dataset=nb_dataset,
+                                                        key="val", remove_labeled=False, use_test_set=True,
+                                                        pretrained_path=valid_pretrained, dataset=dataset,
+                                                        seed=seed, device=device, config=config)
+    else:
+        test_valid_labeled = None
 
     print('Processing labeled nets for the validation set...')
     valid_labeled, _ = prepare_labeled_dataset(valid_labeled_path, nasbench, nb_dataset=nb_dataset, key="val",
@@ -51,14 +72,17 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
 
     labeled_dataset = {
         "train": train_labeled,
-        "valid": valid_labeled
+        "valid": valid_labeled,
+        "valid_unseen_train": test_train_labeled_split,
+        "test_unseen_train": test_train_labeled,
+        "test_unseen_valid": test_valid_labeled
     }
 
     return labeled_dataset, nb_dataset
 
 
 def prepare_labeled_dataset(labeled_path, nasbench, nb_dataset='../data/nb_dataset.json', key="train",
-                            remove_labeled=True, dataset='../data/cifar/', pretrained_path=None,
+                            remove_labeled=True, dataset='../data/cifar/', pretrained_path=None, use_test_set=False,
                             seed=1, device=None, config=None):
     if config is None:
         config = local_dataset_cfg
@@ -67,7 +91,7 @@ def prepare_labeled_dataset(labeled_path, nasbench, nb_dataset='../data/nb_datas
         nb_dataset = generate_or_load_nb_dataset(nasbench, save_path=nb_dataset, seed=seed, **config['nb_dataset'])
 
     labeled = _create_or_load_labeled(nasbench, dataset, pretrained_path, labeled_path, seed=seed, device=device,
-                                      config=config)
+                                      use_test_set=use_test_set, config=config)
 
     # remove labeled nets from unlabeled dataset, get network metadata
     # arch2vec already performed some preprocessing (e.g. padding of smaller adjacency matrices)
@@ -91,7 +115,28 @@ def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
     return train_hashes_chosen, valid_hashes_chosen
 
 
-# TODO tohle na odebrání z val setu potentially
+def split_off_valid(test_labeled, ratio=0.1):
+    unique_nets = np.unique(test_labeled['net_hashes'])
+    chosen_hashes = unique_nets[:math.ceil(ratio * len(unique_nets))]
+
+    hash_map = np.in1d(test_labeled['net_hashes'], chosen_hashes)
+
+    test_orig, test_split = {}, {}
+
+    for k, v in test_labeled.items():
+        apply_hashmap = (isinstance(v, np.ndarray) or isinstance(v, torch.Tensor)) and len(v) == len(hash_map)
+        if apply_hashmap:
+            orig_v, split_v = v[~hash_map], v[hash_map]
+        else:
+            orig_v = v
+            split_v = v
+
+        test_orig[k] = orig_v
+        test_split[k] = split_v
+
+    return test_orig, test_split
+
+
 def _check_hashes(hashes, reference):
     for h in hashes:
         if h not in reference:
@@ -120,7 +165,8 @@ def _check_pretrained(pretrained_path):
         raise ValueError(err_loading)
 
 
-def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, seed=1, device=None, config=None):
+def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, use_test_set=False, seed=1, device=None,
+                            config=None):
     if config is None:
         config = local_dataset_cfg
 
@@ -137,7 +183,7 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, s
 
         print(f'Creating labeled dataset from pretrained networks (saving to {labeled_path}).')
         labeled = dataset_from_pretrained(pretrained_paths, nasbench, dataset, labeled_path, device=device,
-                                          **config['io'])
+                                          use_test_data=use_test_set, **config['io'])
 
     return labeled
 
