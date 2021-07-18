@@ -44,7 +44,10 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                                         key="train", remove_labeled=False, use_test_set=True,
                                                         pretrained_path=train_pretrained, dataset=dataset,
                                                         seed=seed, device=device, config=config)
-        test_train_labeled, test_train_labeled_split = split_off_valid(test_train_labeled, ratio=test_valid_split)
+        if test_valid_split is not None:
+            test_train_labeled, test_train_labeled_split = split_off_valid(test_train_labeled, ratio=test_valid_split)
+        else:
+            test_train_labeled, test_train_labeled_split = None, test_train_labeled
     else:
         test_train_labeled = None
         test_train_labeled_split = None

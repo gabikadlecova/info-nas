@@ -26,13 +26,14 @@ from info_nas.trainer import train
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
 @click.option('--model_cfg', default=None)
 @click.option('--use_ref/--no_ref', default=False)
+@click.option('--test_is_splitted/--split_test', default=False)
 @click.option('--use_unseen_data/--no_unseen_data', default=False)
 @click.option('--device', default='cuda')
 @click.option('--seed', default=1)
 @click.option('--batch_size', default=32)
 @click.option('--epochs', default=7)
 def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, model_cfg, use_ref,
-        use_unseen_data, device, seed, batch_size, epochs):
+        test_is_splitted, use_unseen_data, device, seed, batch_size, epochs):
 
     # load datasets
     if nasbench_path.endswith('.pickle'):
@@ -55,7 +56,8 @@ def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, n
                                                         valid_pretrained=None,
                                                         train_labeled_path=train_path,
                                                         valid_labeled_path=valid_path,
-                                                        test_labeled_train_path=unseen_valid_path)
+                                                        test_labeled_train_path=unseen_valid_path,
+                                                        test_valid_split=None if test_is_splitted else 0.1)
 
     # load all scaling
     scale_config = model_cfg["scale"]

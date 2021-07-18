@@ -12,7 +12,8 @@ local_dataset_cfg = {
     },
 
     'pretrain': {
-        'num_epochs': 10
+        'num_epochs': 12,
+        "optimizer": "SGD"
     },
     'io': {
         'nth_input': 0,
