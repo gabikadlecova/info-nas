@@ -24,6 +24,8 @@ from info_nas.trainer import train
 @click.option('--scale_dir', default='../data/scales/')
 @click.option('--checkpoint_path', default='../data/vae_checkpoints/')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
+@click.option('--nb_dataset', default='../data/nb_dataset.json')
+@click.option('--cifar', default='../data/cifar/')
 @click.option('--model_cfg', default=None)
 @click.option('--use_ref/--no_ref', default=False)
 @click.option('--test_is_splitted/--split_test', default=False)
@@ -32,8 +34,8 @@ from info_nas.trainer import train
 @click.option('--seed', default=1)
 @click.option('--batch_size', default=32)
 @click.option('--epochs', default=7)
-def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, model_cfg, use_ref,
-        test_is_splitted, use_unseen_data, device, seed, batch_size, epochs):
+def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, nb_dataset, cifar,
+        model_cfg, use_ref, test_is_splitted, use_unseen_data, device, seed, batch_size, epochs):
 
     # load datasets
     if nasbench_path.endswith('.pickle'):
@@ -51,7 +53,8 @@ def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, n
     unseen_valid_path = unseen_valid_path if use_unseen_data else None
 
     # the dataset should have the same splits every time
-    labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=1,
+    labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=1, nb_dataset=nb_dataset,
+                                                        dataset=cifar,
                                                         train_pretrained=None,
                                                         valid_pretrained=None,
                                                         train_labeled_path=train_path,
