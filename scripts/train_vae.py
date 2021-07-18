@@ -49,7 +49,8 @@ def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, n
     device = torch.device(device)
     unseen_valid_path = unseen_valid_path if use_unseen_data else None
 
-    labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=seed,
+    # the dataset should have the same splits every time
+    labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=1,
                                                         train_pretrained=None,
                                                         valid_pretrained=None,
                                                         train_labeled_path=train_path,

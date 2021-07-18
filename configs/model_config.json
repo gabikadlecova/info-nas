@@ -26,7 +26,7 @@
     "out_channels": 513,
     "loss": "L1",
     "loss_kwargs": {},
-    "loss_vae_weight": 1e-3,
+    "loss_vae_weight": 1.0,
     "checkpoint": 5,
     "dataset_config": {
         "k": 300,
