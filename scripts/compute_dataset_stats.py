@@ -1,7 +1,9 @@
+import os.path
 import pickle
 
 import click
 import numpy as np
+import pandas as pd
 import torch
 import torch.utils.data
 
@@ -23,7 +25,12 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 @click.option('--batch_size', default=32)
 @click.option('--split_ratio', default=None, type=float)
 @click.option('--config', default=None)
-def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, split_ratio, config):
+@click.option('--save_dir', default=None)
+@click.option('--use_larger_part/--use_smaller_part', default=False)
+def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, split_ratio, config, save_dir,
+         use_larger_part):
+
+    dataset_name = dataset
 
     if nasbench_path.endswith('.pickle'):
         with open(nasbench_path, 'rb') as f:
@@ -56,7 +63,8 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, s
     key = 'val' if scale_name == 'valid' else scale_name
     dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)
     if split_ratio is not None:
-        _, dataset = split_off_valid(dataset, ratio=split_ratio)
+        larger_part, dataset = split_off_valid(dataset, ratio=split_ratio)
+        dataset = larger_part if use_larger_part else dataset
 
     dataset = labeled_network_dataset(dataset, transforms=transforms)
 
@@ -95,9 +103,25 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, s
             val = loss(data, mean_stats).item()
             loss_stats[loss_name].append(val)
 
+    df = []
+
     for loss_name, stats in loss_stats.items():
         print(f"{loss_name}: mean - {np.mean(stats)} | std - {np.std(stats)} | min - {np.min(stats)} | "
               f"median - {np.median(stats)} | max - {np.max(stats)} |")
+
+        df.append({
+            'loss_name': loss_name,
+            'mean': np.mean(stats),
+            'std': np.std(stats),
+            'min': np.min(stats),
+            'max': np.max(stats),
+            'median': np.median(stats),
+        })
+
+    if save_dir is not None:
+        df = pd.DataFrame(df)
+        out_name = os.path.basename(dataset_name).replace('.pt', '')
+        df.to_csv(os.path.join(save_dir, f'{out_name}_baseline.csv'))
 
 
 if __name__ == "__main__":
