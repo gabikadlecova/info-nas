@@ -29,7 +29,7 @@ from info_nas.trainer import train
 @click.option('--model_cfg', default=None)
 @click.option('--use_ref/--no_ref', default=False)
 @click.option('--test_is_splitted/--split_test', default=False)
-@click.option('--use_unseen_data/--no_unseen_data', default=False)
+@click.option('--use_unseen_data/--no_unseen_data', default=True)
 @click.option('--device', default='cuda')
 @click.option('--seed', default=1)
 @click.option('--batch_size', default=32)
