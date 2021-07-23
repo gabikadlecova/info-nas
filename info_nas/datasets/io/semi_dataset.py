@@ -1,6 +1,5 @@
 import math
 import warnings
-from functools import partial
 
 import torch
 import torch.utils.data
@@ -9,6 +8,34 @@ import torch.utils.data
 def get_train_valid_datasets(labeled, unlabeled, k=1, coef_k=1.0, repeat_unlabeled=1, batch_size=32, n_workers=0,
                              shuffle=True, val_batch_size=100, n_valid_workers=0, labeled_transforms=None,
                              labeled_val_transforms=None, **kwargs):
+    """
+    Using the labeled and unlabeled dataset (loaded for example by the function
+    `info_nas.datasets.arch2vec_dataset.get_labeled_unlabeled_datasets`), create the datasets:
+    train_dataset, valid_labeled_dataset, valid_labeled_unique, valid_unlabeled_dataset.
+    `train_dataset` is a `SemiSupervisedDataset` with interleaved labeled and unlabeled batches, valid_labeled_dataset
+    is a `ReferenceNetworkDataset` with labeled batches, valid_labeled_unique is a wrapper around valid_labeled_dataset
+    that returns batches of unique networks, and valid_unlabeled_dataset is the unlabeled validation set.
+
+    Args:
+        labeled: The labeled dataset.
+        unlabeled: The unlabeled dataset.
+        k: Return k successive labeled batches.
+        coef_k: Influences how often the labeled batches are returned
+            (by default 1 : len(unlabeled) / (n unique labeled nets))
+
+        repeat_unlabeled: Repeat the unlabeled dataset during the iteration. Every repetition is shuffled separately.
+        batch_size: The dataset batch size.
+        n_workers: Data loader workers, half is used for labeled loader, half for unlabeled.
+        shuffle: Whether to shuffle the train datasets.
+        val_batch_size: Validation dataset batch size.
+        n_valid_workers: Data loader validation workers, half is used for labeled loader, half for unlabeled.
+        labeled_transforms: The transforms to apply on the labeled train batches.
+        labeled_val_transforms: The transforms to apply on the labeled validation batches.
+        **kwargs: Additional DataLoader parameters (same for all datasets).
+
+    Returns: train_dataset, valid_labeled_dataset, valid_labeled_unique, valid_unlabeled_dataset
+
+    """
 
     train_labeled = labeled_network_dataset(labeled['train'], transforms=labeled_transforms)
     valid_labeled = labeled_network_dataset(labeled['valid'], transforms=labeled_val_transforms)
@@ -57,6 +84,9 @@ def unlabeled_network_dataset(dataset):
 
 # TODO if larger dataset, load from file (IterableDataset - only for io, unlabeled are short enough)
 class NetworkDataset(torch.utils.data.Dataset):
+    """
+    A dataset with a variable batch length.
+    """
     def __init__(self, *args):
         super().__init__()
 
@@ -74,6 +104,10 @@ class NetworkDataset(torch.utils.data.Dataset):
 
 
 class ReferenceNetworkDataset(NetworkDataset):
+    """
+    A dataset that, that maps indices of images to the true data, and returns it as a batch. Optionally transforms
+    the data afterwards.
+    """
     def __init__(self, *args, reference_dataset=None, reference_id=1, net_repo=None, net_id=0,
                  return_hash=True, return_ref_id=False, transform=None):
 
@@ -158,6 +192,9 @@ class ReferenceNetworkDataset(NetworkDataset):
 
 
 class UniqueValidationNets:
+    """
+    Get unique architectures ('adj' and 'ops') from a labeled dataset.
+    """
     def __init__(self, net_dataset: ReferenceNetworkDataset, batch_size=32):
         self.net_dataset = net_dataset
         self.batch_size = batch_size
@@ -197,6 +234,9 @@ class UniqueValidationNets:
 
 
 class SemiSupervisedDataset:
+    """
+    A dataset that interleaves labeled and unlabeled batches.
+    """
     def __init__(self, labeled, unlabeled, n_labeled_nets, k=1, coef_k=1.0, batch_size=32, n_workers=0, shuffle=True,
                  repeat_unlabeled=1, **kwargs):
         self.n, self.n_labeled, self.n_unlabeled = 0, 0, 0

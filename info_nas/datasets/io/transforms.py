@@ -7,6 +7,19 @@ import torchvision
 
 
 def get_transforms(scale_path, include_bias, normalize, multiply_by_weights, scale_whole_path=False):
+    """
+    Gets all transforms for the training, loads saved fit data for scalers.
+
+    Args:
+        scale_path: Path to load per networks scales from.
+        include_bias: Include bias to the output features.
+        normalize: If True, normalize the network data, if false, min max scale.
+        multiply_by_weights: If True, multiply the outputs by the weights of the network (according to the label).
+        scale_whole_path: Path to a scale for the whole dataset.
+
+    Returns: Transforms for the dataset.
+
+    """
     transforms = []
 
     if include_bias:
@@ -68,7 +81,18 @@ class IncludeBias:
 
 
 class SortByWeights:
+    """
+    Sorts the outputs by weights corresponding to the inputs label.
+    """
     def __init__(self, fixed_label=None, return_top_n=None, after_sort_scale=None):
+        """
+        Initializes the sort transform.
+
+        Args:
+            fixed_label: Sorts using a fixed label instead.
+            return_top_n: Return only top n features.
+            after_sort_scale: Scale the data after sorting.
+        """
         self.fixed_label = fixed_label
         self.return_top_n = return_top_n
 
@@ -97,6 +121,7 @@ class SortByWeights:
             sort_key, indices = torch.sort(sort_key, descending=True)
             output = output[indices].detach()
         else:
+            # return top k features of each per class
             sort_key, indices = torch.sort(sort_key, descending=True)
             outputs_all = output[indices].detach()
             output = outputs_all[:, self.return_top_n].flatten()
@@ -110,8 +135,23 @@ class SortByWeights:
 
 
 class Scaler:
+    """
+    Scales the outputs of every network.
+    """
     def __init__(self, net_scales=None, per_label=False, normalize=False, axis=None, mult_by_weights=True,
                  weighted=False, include_bias=True):
+        """
+        Initializes the scaling transform.
+
+        Args:
+            net_scales: Fitted scales for every network.
+            per_label: Use separate scales for every label.
+            normalize: If True, normalize, if False, min max scale.
+            axis: Axis for the scaling.
+            mult_by_weights: Multiply the outputs by weights.
+            weighted: Scale the weighted data, not the original outputs.
+            include_bias: Include bias when scaling and/or multiplying by weights.
+        """
 
         self.per_label = per_label
         self.normalize = normalize
@@ -209,5 +249,8 @@ class Scaler:
 
 
 class ToTuple:
+    """
+    Convert to tuple batch instead of a dict batch.
+    """
     def __call__(self, item):
         return item['adj'], item['ops'], item['input'], item['output']

@@ -28,7 +28,29 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
                                    valid_pretrained='../data/valid_checkpoints/',
                                    test_labeled_train_path=None, test_labeled_valid_path=None, test_valid_split=0.1,
                                    remove_labeled=True, device=None, config=None):
-    # creates/loads both the original dataset and the labeled io dataset
+    """
+    Loads the unlabeled arch2vec dataset, loads (or creates using pretrained checkpoints) the IO dataset.
+
+    Args:
+        nasbench: An instance of nasbench.api.NASBench(nb_path).
+        nb_dataset: Path to the saved arch2vec dataset (will be created if it does not exist).
+        dataset: Dataset to use for creating the dataset (see info_nas.datasets.io.dataset_from_pretrained() for the
+            format).
+        seed: seed to use
+        train_labeled_path: Path to save the labeled train set or to load it from there.
+        valid_labeled_path: Path to save the labeled validation set (unseen networks) or to load it from there.
+        train_pretrained:
+        valid_pretrained:
+        test_labeled_train_path: Path to save the labeled test set (unseen images) or to load it from there.
+        test_labeled_valid_path: Path to save the labeled test set (unseen nets and images) or to load it from there.
+        test_valid_split: Split off a small part of the 'unseen images' test set and use it as a second validation set.
+        remove_labeled: Remove labeled networks from the unlabeled datasets.
+        device: Device to use for creating the labeled dataset.
+        config: pretrain config, if None, info_nas.config.local_dataset_cfg is used
+
+    Returns: The labeled and the unlabeled dataset.
+
+    """
 
     if config is None:
         config = local_dataset_cfg
@@ -87,6 +109,25 @@ def get_labeled_unlabeled_datasets(nasbench, nb_dataset='../data/nb_dataset.json
 def prepare_labeled_dataset(labeled_path, nasbench, nb_dataset='../data/nb_dataset.json', key="train",
                             remove_labeled=True, dataset='../data/cifar/', pretrained_path=None, use_test_set=False,
                             seed=1, device=None, config=None):
+    """
+    Loads or creates the labeled dataset. Returns both the labeled and unlabeled dataset.
+
+    Args:
+        labeled_path: Path to the labeled dataset, or where to save it, if it is not created yet.
+        nasbench: An instance of nasbench.api.NASBench(nb_path).
+        nb_dataset: The unlabeled dataset or path to it.
+        key: train or val - key to the unlabeled dataset where network data is loaded from.
+        remove_labeled: Remove labeled networks from the unlabeled dataset.
+        dataset: Dataset to use for creating the labeled dataset.
+        pretrained_path: Path to pretrained networks, if the dataset is to be created.
+        use_test_set: Use test set for dataset creation.
+        seed: Seed to use.
+        device: Device for prediction.
+        config: Pretraining config, if None, local_dataset_cfg is used.
+
+    Returns: The loaded labeled dataset and the unlabeled dataset.
+
+    """
     if config is None:
         config = local_dataset_cfg
 
@@ -104,6 +145,16 @@ def prepare_labeled_dataset(labeled_path, nasbench, nb_dataset='../data/nb_datas
 
 
 def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
+    """
+    Choose a small number of networks from the unlabeled train and validation set to label.
+    Args:
+        dataset: The unlabeled arch2vec dataset.
+        seed: Seed to use for the split, if None, no seed is used.
+        percent_labeled: The proportion to choose.
+
+    Returns: The chosen train and validation hashes
+
+    """
     state = np.random.RandomState(seed) if seed is not None else np.random
 
     train, valid = dataset["train"], dataset["val"]
@@ -119,6 +170,17 @@ def split_to_labeled(dataset, seed=1, percent_labeled=0.01):
 
 
 def split_off_valid(test_labeled, ratio=0.1):
+    """
+    Split off a small part of the labeled dataset according to network hashes. The data not specific to networks is
+    shared in both created datasets.
+
+    Args:
+        test_labeled: Labeled dataset.
+        ratio: Ratio of hashes to choose.
+
+    Returns: Dataset from the rest of the networks, splitted dataset.
+
+    """
     unique_nets = np.unique(test_labeled['net_hashes'])
     chosen_hashes = unique_nets[:math.ceil(ratio * len(unique_nets))]
 
