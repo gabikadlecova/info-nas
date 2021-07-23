@@ -25,6 +25,18 @@ def save_extended_vae(dir_name, model, optimizer, epoch, model_class, model_kwar
 
 
 def load_extended_vae(model_path, model_args, device=None, optimizer=None):
+    """
+    Load the checkpoint of the extended model.
+
+    Args:
+        model_path: Path to the .pt checkpoint
+        model_args: Args to pass to the model class (kwargs are saved in the checkpoint)
+        device: Device of the model.
+        optimizer: Optimizer, if saved optimizer state is to be used.
+
+    Returns: The loaded model and the checkpoint
+
+    """
     checkpoint = torch.load(model_path, map_location=device)
 
     kwargs = checkpoint['model_kwargs']

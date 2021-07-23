@@ -14,6 +14,16 @@ def get_net_from_hash(hash, nasbench):
 
 
 def load_nasbench(nasbench_path, include_metrics=False):
+    """
+    Load all networks in the nasbench dataset along with their hashes.
+
+    Args:
+        nasbench_path: Path to the nasbench dataset.
+        include_metrics: Include also accuracy and other metrics (not implemented yet).
+
+    Returns: The loaded dataset.
+
+    """
     if include_metrics:
         raise NotImplementedError("Metrics are not supported yet.")
 

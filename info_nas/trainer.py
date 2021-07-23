@@ -27,6 +27,33 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
           use_reference_model=False, model_config=None, device=None,
           batch_size=32, seed=1, epochs=8, writer=None, verbose=2, print_frequency=1000,
           batch_len_labeled=4, torch_deterministic=False, cudnn_deterministic=False):
+    """
+    Train the extended model on the labeled and unlabeled dataset. Optionally, train the original model alongside the
+    extended one for reference. Save model checkpoints and metrics to a directory.
+
+    Args:
+        labeled: The labeled dataset (e.g from info_nas.datasets.arch2vec_dataset)
+        unlabeled: The unlabeled dataset (e.g from info_nas.datasets.arch2vec_dataset)
+        nasbench: An instance of nasbench.api.NASBench(nb_path).
+        checkpoint_dir: The directory to save checkpoints in.
+        transforms: Transforms for the train set.
+        valid_transforms: Transforms for the valid set.
+        use_reference_model: If True, train the reference model.
+        model_config: Config for the training, if None, set to info_nas.configs.local_model_cfg
+        device: Device for the training.
+        batch_size: Batch size of both labeled and unlabeled batches.
+        seed: Seed to use.
+        epochs: Number of epochs
+        writer: Not yet implemented SummaryWriter
+        verbose: 0, 1 or 2, control the output
+        print_frequency: How often to print the train loss.
+        batch_len_labeled: Number of items in the labeled batch tuple
+        torch_deterministic: Use deterministic torch
+        cudnn_deterministic: Use deterministic cudnn
+
+    Returns: Trained labeled model, metrics, loss stats
+
+    """
 
     config, model_config = _init_config_and_seeds(model_config, seed, torch_deterministic, cudnn_deterministic)
 
@@ -56,6 +83,7 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
     model_labeled, optimizer_labeled = _initialize_labeled_model(model, in_channels, device=device,
                                                                  model_config=model_config)
 
+    # train the reference model as well
     if use_reference_model:
         model_ref, optimizer_ref = get_arch2vec_model(device=device)
         model_ref.load_state_dict(model.state_dict())

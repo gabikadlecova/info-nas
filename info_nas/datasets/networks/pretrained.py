@@ -8,6 +8,23 @@ from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net
 
 def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=None, num_epochs=10, num_labels=10,
                              dir_path='./checkpoints/', skip_existing=True, **kwargs):
+    """
+    Pretrain networks from the NAS-Bench-101 dataset according to a list of their hashes. Store their checkpoints.
+
+    Args:
+        net_hashes: A list of net hashes that should be trained.
+        nasbench: Path to the saved arch2vec dataset (will be created if it does not exist).
+        dataset: Dataset to use for the training (see info_nas.datasets.io.dataset_from_pretrained() for the
+            format).
+
+        device: Device to use for the training.
+        num_epochs: Number of training epochs.
+        num_labels: Number of labels for the classification.
+        dir_path: Path where the checkpoints will be saved to.
+        skip_existing: Skip networks that exists in the directory.
+        **kwargs: Additional kwargs for the training.
+
+    """
 
     train_set, n_train, val_set, n_val, test_set, n_test = dataset
 
