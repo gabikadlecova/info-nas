@@ -1,4 +1,5 @@
 from copy import copy
+from functools import partial
 
 import click
 import os
@@ -9,24 +10,29 @@ import scipy.stats
 import sklearn
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.svm import SVR
-from sklearn.ensemble import RandomForestRegressor, AdaBoostRegressor, GradientBoostingRegressor
+from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import torch
 from matplotlib import pyplot as plt
 
 from info_nas.datasets.io.create_dataset import load_io_dataset
 
+regressor_names = {
+    'gp': GaussianProcessRegressor,
+    'gp_norm': partial(GaussianProcessRegressor, normalize_y=True),
+    'svr': SVR,
+    'rf': RandomForestRegressor,
+    'rf1000': partial(RandomForestRegressor, n_estimators=1000),
+    'rf_tune': partial(RandomForestRegressor, n_estimators=200, max_features=4),
+    'gb': GradientBoostingRegressor
+}
 
-def fit_eval_gp(train_features, train_accuracies, test_features, regr_name):
-    if regr_name == 'gp':
-        regr = GaussianProcessRegressor()
-    elif regr_name == 'svr':
-        regr = SVR()
-    elif regr_name == 'rf':
-        regr = RandomForestRegressor()
-    elif regr_name == 'rf1000':
-        regr = RandomForestRegressor(n_estimators=1000)
-    elif regr_name == 'gb':
-        regr = GradientBoostingRegressor()
+
+def fit_eval_gp(train_features, train_accuracies, test_features, regr_name, **kwargs):
+    if regr_name in regressor_names:
+        regr = regressor_names[regr_name]
+        regr = regr() if regr_name != 'rf' else regr(**kwargs)
+    else:
+        raise ValueError("Unsupported regressor name, supported: ")
 
     regr.fit(train_features, train_accuracies)
     pred = regr.predict(test_features)
@@ -75,12 +81,15 @@ def plot_acc(test_target_acc, test_pred_acc, acc_map, title, save_path):
 @click.command()
 @click.argument('emb_path')
 @click.option('--dir_name', default='.')
+@click.option('--save_dir', default=None)
 @click.option('--train_dataset', default='../data/train_long.pt')
 @click.option('--regr_name', default='rf')
+@click.option('--max_features', default="auto")
+@click.option('--n_estimators', default=100)
 @click.option('--n_hashes', default=None, type=int)
 @click.option('--use_train/--use_any', default=False)
 @click.option('--seed', default=1)
-def main(emb_path, dir_name, train_dataset, regr_name, n_hashes, use_train, seed):
+def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed):
     np.random.seed(seed)
 
     f_path = os.path.join(dir_name, emb_path)
@@ -141,12 +150,16 @@ def main(emb_path, dir_name, train_dataset, regr_name, n_hashes, use_train, seed
     titles = ["All features - validation accuracy", "Test features - validation accuracy",
               "All features - test accuracy", "Test features - test accuracy"]
 
-    save_dir = os.path.join(dir_name, f'{regr_name}_{n_hashes}_{seed}_{emb_path}')
+    if save_dir is None:
+        save_dir = dir_name
+
+    save_dir = os.path.join(save_dir, f'{regr_name}_{n_hashes}_{seed}_{"train" if use_train else "any"}_{emb_path}')
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
     for eval_features, eval_acc, train_acc, title in zip(x, y, train_y, titles):
-        preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name)
+        preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name,
+                            max_features=max_features, n_estimators=n_estimators)
         print(title)
         print('---------------------')
 
@@ -156,5 +169,3 @@ def main(emb_path, dir_name, train_dataset, regr_name, n_hashes, use_train, seed
 
 if __name__ == "__main__":
     main()
-
-# todo nezapomenout spustit ABLATIONS

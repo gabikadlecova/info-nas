@@ -31,8 +31,11 @@ def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
         )
 
 
-def eval_labeled_validation(model, validation, device, config, loss_labeled):
+def eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False):
     if isinstance(validation, dict):
+        if return_all_metrics:
+            raise ValueError("Can return only summary metrics for multiple validation sets.")
+
         # process multiple validation sets
         res_dict = {}
 
@@ -44,10 +47,11 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled):
         return res_dict
     else:
         # there is only one validation set
-        return _eval_labeled_validation(model, validation, device, config, loss_labeled)
+        return _eval_labeled_validation(model, validation, device, config, loss_labeled,
+                                        return_all_metrics=return_all_metrics)
 
 
-def _eval_labeled_validation(model, validation, device, config, loss_labeled):
+def _eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False):
     loss_m = {"val_loss": []}
     metrics = {k: [] for k in metrics_dict.keys()}
     metrics = {**loss_m, **metrics}
@@ -77,7 +81,7 @@ def _eval_labeled_validation(model, validation, device, config, loss_labeled):
     mean_metrics["val_loss_max"] = np.max(metrics["val_loss"])
     mean_metrics["val_loss_std"] = np.std(metrics["val_loss"])
     mean_metrics["val_loss_median"] = np.median(metrics["val_loss"])
-    return mean_metrics
+    return mean_metrics if not return_all_metrics else (mean_metrics, metrics)
 
 
 def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
