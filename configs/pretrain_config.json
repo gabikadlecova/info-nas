@@ -1,6 +1,6 @@
 {
     "cifar-10": {
-        "batch_size": 256,
+        "batch_size": 128,
         "validation_size": 1000,
         "num_workers": 4
     },
