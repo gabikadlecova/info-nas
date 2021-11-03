@@ -10,6 +10,9 @@ from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list
 
 
 class IOModel(nn.Module):
+    """
+    A model that processes architecture data (using a VAE) as well as IO data (using the VAE encoder and a regressor).
+    """
     def __init__(self, vae_model, activation=None):
         super().__init__()
         self.vae_model = vae_model
@@ -33,6 +36,10 @@ class IOModel(nn.Module):
 
 
 class ConcatConvModel(IOModel):
+    """
+    An IO model where the network representation is concatenated to the network along the channel axis (repeated across
+    spatial dimensions).
+    """
     def __init__(self, vae_model, input_channels, output_channels, start_channels=128, z_hidden=16,
                  n_steps=2, n_convs=2, dense_output=True, activation=None,
                  use_3x3_for_z=False, use_3x3_for_output=False):
@@ -80,17 +87,24 @@ class ConcatConvModel(IOModel):
 
 
 class DensePredConvModel(IOModel):
+    """
+    An IO model where the network and image vector representations are concatenated and then passed through dense
+    layers.
+    """
     def __init__(self, vae_model, input_channels, output_channels, start_channels=128, activation=None, z_hidden=16,
                  n_steps=2, n_convs=2, n_dense=1, dense_size=512, dropout=None):
 
         super().__init__(vae_model, activation=activation)
 
+        # process images
         self.first_conv = ConvBnRelu(input_channels, start_channels, kernel_size=3, padding=1)
         self.conv_list, channels = get_conv_list(n_steps, n_convs, start_channels)
 
+        # process network data
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
         self.concat_dense = nn.Linear(z_hidden + channels, dense_size)
 
+        # process concatenated data
         dense_list = []
 
         for i in range(n_dense):

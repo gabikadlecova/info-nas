@@ -18,24 +18,39 @@ from info_nas.trainer import train
 # @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
 
 @click.command()
-@click.option('--train_path', default='../data/train_long.pt')
-@click.option('--valid_path', default='../data/valid_long.pt')
-@click.option('--unseen_valid_path', default='../data/test_train_long.pt')
-@click.option('--scale_dir', default='../data/scales/')
-@click.option('--checkpoint_path', default='../data/vae_checkpoints/')
-@click.option('--nasbench_path', default='../data/nasbench.pickle')
-@click.option('--nb_dataset', default='../data/nb_dataset.json')
-@click.option('--cifar', default='../data/cifar/')
-@click.option('--model_cfg', default=None)
-@click.option('--use_ref/--no_ref', default=False)
-@click.option('--test_is_splitted/--split_test', default=False)
-@click.option('--use_unseen_data/--no_unseen_data', default=True)
-@click.option('--device', default='cuda')
-@click.option('--seed', default=1)
-@click.option('--batch_size', default=32)
-@click.option('--epochs', default=7)
+@click.option('--train_path', default='../data/train_long.pt', help="Path to the saved train IO dataset.")
+@click.option('--valid_path', default='../data/valid_long.pt',
+              help="Path to the saved validation (unseen networks) IO dataset.")
+@click.option('--unseen_valid_path', default='../data/test_train_long.pt',
+              help="Path to the saved validation (unseen images) IO dataset.")
+@click.option('--scale_dir', default='../data/scales/', help="Directory where the scaler fit data is stored.")
+@click.option('--checkpoint_path', default='../data/vae_checkpoints/',
+              help="Checkpoint directory; the checkpoint is created in a subdirectory named by the current timestamp.")
+@click.option('--nasbench_path', default='../data/nasbench.pickle',
+              help="Path to the nasbench dataset (pickle or directly downloaded from the nasbench original repo "
+                   "(where the download link is provided).")
+@click.option('--nb_dataset', default='../data/nb_dataset.json',
+              help="Path to stored arch2vec dataset (if it does not exist yet, it will be created and saved there).")
+@click.option('--cifar', default='../data/cifar/',
+              help="Path to preloaded CIFAR-10 dataset, if it was not preloaded yet, it will be preloaded there now.")
+@click.option('--model_cfg', default=None,
+              help="Path to model config, if None, info_nas.config.local_model_cfg is used.")
+@click.option('--use_ref/--no_ref', default=False,
+              help="If True, train the arch2vec model alongside the extended model for reference.")
+@click.option('--test_is_splitted/--split_test', default=False,
+              help="If True, use the whole file from unseen_valid_path, if False, split a small dataset "
+                   "(ratio 0.1) from it.")
+@click.option('--use_unseen_data/--no_unseen_data', default=True,
+              help="If True, use the unseen image validation set, if False, do not use it.")
+@click.option('--device', default='cuda', help="Device for the training.")
+@click.option('--seed', default=1, help="Seed to use.")
+@click.option('--batch_size', default=32, help="Batch size for both labeled and unlabeled batches.")
+@click.option('--epochs', default=7, help="Number of training epochs.")
 def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, nb_dataset, cifar,
         model_cfg, use_ref, test_is_splitted, use_unseen_data, device, seed, batch_size, epochs):
+    """
+    Run the training of the info-NAS model.
+    """
 
     # load datasets
     if nasbench_path.endswith('.pickle'):

@@ -29,6 +29,9 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 @click.option('--use_larger_part/--use_smaller_part', default=False)
 def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, split_ratio, config, save_dir,
          use_larger_part):
+    """
+    Compute the baseline - difference between batches and the mean of a scaled dataset. Output and save stats.
+    """
 
     dataset_name = dataset
 

@@ -54,8 +54,7 @@ python train_vae.py --model_cfg ../configs/model_config.json --use_ref
 ```
 
 The config file `./configs/model_config.json` contains training and model parameters, try to experiment with some
-(do not delete any fields, the config validation during loading is not yet
-implemented).
+settings.
 
 ## Run REINFORCE search
 The feature extraction and run script is located in the arch2vec repository.

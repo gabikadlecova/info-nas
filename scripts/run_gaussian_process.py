@@ -80,16 +80,28 @@ def plot_acc(test_target_acc, test_pred_acc, acc_map, title, save_path):
 
 @click.command()
 @click.argument('emb_path')
-@click.option('--dir_name', default='.')
+@click.option('--dir_name', default='.',
+              help="Directory where the features are save in, and where to save the predictor results.")
 @click.option('--save_dir', default=None)
-@click.option('--train_dataset', default='../data/train_long.pt')
-@click.option('--regr_name', default='rf')
+@click.option('--train_dataset', default='../data/train_long.pt',
+              help="Load the train set to get unique hashes. The regressor is fitted either on train nets, or on all "
+                   "other nets.")
+@click.option('--regr_name', default='rf',
+              help="Name of the regressor, possible values: [rf, rf1000, gp, svr, gb], meaning:"
+                   "Random forest, random forest with 1000 estimators, gaussian process, support vector regressor,"
+                   " gradient boosting.")
 @click.option('--max_features', default="auto")
 @click.option('--n_estimators', default=100)
-@click.option('--n_hashes', default=None, type=int)
-@click.option('--use_train/--use_any', default=False)
-@click.option('--seed', default=1)
+@click.option('--n_hashes', default=None, type=int, help="Number of hashes to select for the fit.")
+@click.option('--use_train/--use_any', default=False,
+              help="If True, use train hashes, if False, use unseen networks (from the rest of the NAS-Bench-101).")
+@click.option('--seed', default=1, help="Seed to use.")
 def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed):
+    """
+    Fit and evaluate a performance predictior using the embedded features.
+
+    Args: EMB_PATH - Name of the saved features (generated in the arch2vec repository).
+    """
     np.random.seed(seed)
 
     f_path = os.path.join(dir_name, emb_path)

@@ -9,6 +9,16 @@ from info_nas.datasets.networks.utils import load_trained_net
 
 
 def load_io_dataset(dataset_path: str, device=None):
+    """
+    Load the saved dataset, map the data location to `device`.
+
+    Args:
+        dataset_path: Path to the checkpoint (.pt format)
+        device: Device for the data.
+
+    Returns: The loaded IO dataset
+
+    """
     data = torch.load(dataset_path, map_location=device)
     return data
 
@@ -20,12 +30,31 @@ def _list_net_dir(net_dir: str):
 
 def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, save_path: str, device=None,
                             use_test_data=False, **kwargs):
-    # pretrained networks in a folder
+    """
+    Create the IO dataset using the checkpoints of trained networks and a dataset of inputs. Save it to a directory,
+    the output file format is .pt.
+
+    Args:
+        net_dir: Either a list of directories, or one directory, where the .tar network checkpoints are loaded from.
+        nasbench: An instance of nasbench.api.NASBench(nb_path).
+        dataset: The input dataset with the format:
+            train_loader, n_train, valid_loader, n_valid, test_loader, n_test
+
+        save_path: Path to save the checkpoint (the output should have the .pt format).
+        device: The device for the neural networks (used during prediction).
+        use_test_data: If True, use the test dataset, if False, use the validation set for IO dataset creation.
+        **kwargs: Additional kwargs for the `create_io_dataset` function.
+
+    Returns: The generated IO dataset.
+
+    """
+
+    # pretrained networks in one folder
     if isinstance(net_dir, str):
-        net_paths = _list_net_dir(net_dir)
-    else:
-        # join multiple folders
-        net_paths = [p for nd in net_dir for p in _list_net_dir(nd) if p.endswith('.tar')]
+        net_dir = [net_dir]
+
+    # join multiple folders
+    net_paths = [p for nd in net_dir for p in _list_net_dir(nd) if p.endswith('.tar')]
 
     print(f'Creating dataset from {len(net_paths)} pretrained networks.')
 
@@ -39,6 +68,37 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
 
 def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20,
                       use_test_data=False, test_subset_size=20):
+    """
+    Create the IO dataset with the following format (N is the size of the dataset, M is the number of trained
+    networks, I is the number of images):
+    {
+        'net_hashes': vector of hashes, length N, M unique,
+        'inputs': dataset of inputs of length N, either image data or indices of images in 'dataset' (I unique),
+        'outputs': dataset of outputs of length N, either a feature vector or a feature map,
+        'dataset': the dataset that was used to create the IO data (length I),
+        'labels': a vector of labels (length N),
+        'use_reference': if True, the 'inputs' contain indices of images from 'dataset',
+        'net_repo': a dict with net hash keys (M unique), where network specific data like weights or biases (of the
+            last dense layer) are stored
+    }
+
+    Args:
+        networks: An iterable of trained networks for prediction. Must have the function
+            get_cell_outputs(inputs, return_inputs=True) that returns a list of inputs and corresponding outputs -
+            the inputs to a (hidden) layer of the network and corresponding outputs.
+
+        dataset: The dataset for creation of the IO data.
+        nth_input: The index of the returned input data in the input list.
+        nth_output: The index of the returned output data in the input list.
+        loss: The loss to use for evaluation of predictions (default nn.CrossEntropyLoss)
+        device: The device for prediction.
+        print_frequency: Prints the number of processed networks every `print_frequency`.
+        use_test_data: If True, use test data for prediction, if False, validation.
+        test_subset_size: Use a random sample of the test set if it is too big (in batches)
+
+    Returns: The created IO dataset.
+
+    """
 
     _, _, valid_loader, validation_size, test_loader, test_size = dataset
     # test dataset
@@ -142,7 +202,7 @@ def _get_net_outputs(net: NBNetwork, data_loader, nth_input, nth_output, loss=No
 
             in_list, out_list = net.get_cell_outputs(inputs, return_inputs=True)
 
-            # if first input (original image), save example index instead
+            # if first input (original image), save reference index instead
             if nth_input != 0:
                 save_input = in_list[nth_input].to('cpu')
             else:
