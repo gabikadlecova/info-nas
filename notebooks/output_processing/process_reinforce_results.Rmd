@@ -1,0 +1,203 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.0
+      jupytext_formats: ipynb,Rmd:rmarkdown
+  kernelspec:
+    display_name: pyt_conda
+    language: python
+    name: pyt_conda
+---
+
+```{python}
+# %autosave 0
+import os
+
+runs_dir = '/home/gabi/diplomka/results/with_ref_5/2021-20-07_23-26-03/reinforce-runs'
+```
+
+```{python}
+import json
+
+with open(os.path.join(runs_dir, 'run_497_features_model_orig_epoch-9.json'), 'rb') as f:
+    res = json.load(f)
+res.keys()
+```
+
+```{python}
+import pandas as pd
+
+pd.DataFrame(res)
+```
+
+```{python}
+def process_one_run(file):
+    with open(file, 'rb') as f:
+        res = json.load(f)
+        
+    res_df = pd.DataFrame(res)
+    res_df['name'] = os.path.basename(file).replace('.json', '')
+    
+    return res_df
+```
+
+```{python}
+import glob
+
+info_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_orig_epoch-9.json'))
+info_9_dfs = [process_one_run(g) for g in info_9_runs]
+info_9_dfs = pd.concat(info_9_dfs, axis=0)
+info_9_dfs
+```
+
+```{python}
+arch_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_ref_epoch-9.json'))
+arch_9_dfs = [process_one_run(g) for g in arch_9_runs]
+arch_9_dfs = pd.concat(arch_9_dfs, axis=0)
+arch_9_dfs
+```
+
+```{python}
+rounded_run = info_9_dfs['runtime'].round(decimals=-3)
+rounded_run[rounded_run == 2000]
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib notebook
+
+cutoff=False
+
+sns.set()
+
+info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
+arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+
+plt.figure()
+sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_validation',
+#             label='info-NAS, 10 epochs')
+             label='our model, 10 epochs')
+sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_validation',
+             label='arch2vec, 10 epochs')
+
+sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_validation',
+#             label='info-NAS, 30 epochs')
+             label='our model, 10 epochs')
+sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_validation',
+             label='arch2vec, 30 epochs')
+
+plt.xscale('log')
+plt.yscale('log')
+if cutoff:
+    plt.xlim(left=5e5, right=1.5e6)
+else:
+    plt.xlim(right=1.5e6)
+
+save_path = '/home/gabi/diplomka/neurips/paper/diplomka_to_neurips/img/'
+    
+plt.xlabel('Runtime')
+plt.ylabel('Validation regret')
+plt.title(f"Comparison of 500 REINFORCE runs - validation{' (detail)' if cutoff else ''}")
+plt.tight_layout()
+plt.savefig(os.path.join(save_path, f'valid_reinf{"_cutoff" if cutoff else ""}.png'))
+plt.show()
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib notebook
+
+cutoff=False
+
+sns.set()
+
+info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
+arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+
+plt.figure()
+sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test',
+             label='our model, 10 epochs')
+sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test',
+             label='arch2vec, 10 epochs')
+
+sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_test',
+             label='our model, 30 epochs')
+sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_test',
+             label='arch2vec, 30 epochs')
+
+plt.xscale('log')
+plt.yscale('log')
+if cutoff:
+    plt.xlim(left=5e5, right=1.5e6)
+else:
+    plt.xlim(right=1.5e6)
+    
+plt.xlabel('Runtime')
+plt.ylabel('Test regret')
+plt.title(f"Comparison of 500 REINFORCE runs - test{' (detail)' if cutoff else ''}")
+plt.tight_layout()
+plt.savefig(os.path.join(save_path, f'test_reinf{"_cutoff" if cutoff else ""}.png'))
+plt.show()
+```
+
+```{python}
+
+```
+
+```{python}
+info_29_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_orig_epoch-29.json'))
+info_29_dfs = [process_one_run(g) for g in info_29_runs]
+info_29_dfs = pd.concat(info_29_dfs, axis=0)
+info_29_dfs
+```
+
+```{python}
+arch_29_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_ref_epoch-29.json'))
+arch_29_dfs = [process_one_run(g) for g in arch_29_runs]
+arch_29_dfs = pd.concat(arch_29_dfs, axis=0)
+arch_29_dfs
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib notebook
+
+info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
+arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+
+plt.figure()
+sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_validation')
+sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_validation')
+
+plt.xscale('log')
+plt.yscale('log')
+plt.show()
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib notebook
+
+info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
+arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+
+plt.figure()
+sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_test')
+sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_test')
+
+plt.xscale('log')
+plt.yscale('log')
+plt.show()
+```
+
+```{python}
+
+```

@@ -1,0 +1,240 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.0
+      jupytext_formats: ipynb,Rmd:rmarkdown
+  kernelspec:
+    display_name: bioinf
+    language: python
+    name: bioinf
+---
+
+```{python}
+# %autosave 0
+```
+
+```{python}
+seed=1
+```
+
+```{python}
+import os
+
+os.listdir('..')
+```
+
+```{python}
+from nasbench import api
+
+nasbench_path = '../data/nasbench_only108.tfrecord'
+nb = api.NASBench(nasbench_path)
+```
+
+```{python}
+import torch
+from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
+
+#torch.backends.cudnn.benchmark = True
+device = torch.device('cuda')
+
+# device = None otherwise the dataset is save to the cuda as a whole
+labeled, unlabeled = get_labeled_unlabeled_datasets(nb, device=device, seed=seed,
+                                                    train_pretrained=train_pretrained,
+                                                    valid_pretrained=val_pretrained,
+                                                    train_labeled_path='../data/train_long.pt',
+                                                    valid_labeled_path='../data/valid_long.pt')
+```
+
+## Test dataset shapes
+
+```{python}
+for i in range(len(labeled['valid_io']['inputs'])):
+    if i not in labeled['valid_io']['inputs']:
+        raise ValueError()
+        
+    assert (sum(labeled['train_io']['inputs'] == i)) == 4
+```
+
+```{python}
+[l.shape for l in labeled['train_io'].values() if not isinstance(l, int)]
+```
+
+```{python}
+# 7 GB per 4000 nets
+labeled['train_io']['outputs'].element_size() * 4000 * 512 / 1024 / 1024 / 1024 * 1000
+```
+
+```{python}
+[l.shape for l in labeled['train_net']]
+```
+
+```{python}
+unlabeled.keys()
+```
+
+```{python}
+unlabeled['train'][1][0].shape, unlabeled['train'][2][0].shape
+```
+
+```{python}
+len(unlabeled['train'][1])
+```
+
+## Test model shapes
+
+```{python}
+from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
+
+model, opt = get_arch2vec_model()
+```
+
+```{python}
+from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
+
+nb_dataset = get_nasbench_datasets('../data/nb_dataset.json', batch_size=None, seed=1)
+```
+
+```{python}
+#model.train()
+model.eval()
+
+batch_adj, batch_ops = nb_dataset['train'][1][:32], nb_dataset['train'][2][:32]
+
+mu, logvar = model._encoder(batch_ops, batch_adj)
+z = model.reparameterize(mu, logvar)
+```
+
+```{python}
+print(f"mu shape: {mu.shape}, logvar shape: {logvar.shape}, z shape: {z.shape}")
+```
+
+```{python}
+import torch.nn as nn
+
+m = nn.Sequential(
+    nn.Flatten(),
+    nn.Linear(z.shape[1] * z.shape[2], 5),
+    nn.ReLU()
+)
+m(z).shape
+```
+
+```{python}
+# test unsqueeze and channels
+
+conv = nn.Conv2d(32, 8, 1, padding=0)
+conv(mu.unsqueeze(0)).shape
+```
+
+```{python}
+# repeat and concat
+repeated = torch.Tensor([3]).repeat(mu.shape[0], mu.shape[1], 1)
+print(repeated.shape)
+
+torch.cat([mu, repeated], axis=-1).shape
+```
+
+## Extended models
+
+```{python}
+from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
+from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
+
+model, opt = get_arch2vec_model(device=device)
+```
+
+```{python}
+print(labeled['train']['dataset'].shape)
+print(labeled['train']['inputs'].shape)
+print(labeled['train']['outputs'].shape)
+```
+
+```{python}
+from info_nas.models.io_model import ConcatConvModel
+
+extended_model = ConcatConvModel(model, 128, 512).to(device)
+```
+
+```{python}
+in_batch = labeled['train_io']['inputs'][:32]
+out_batch = labeled['train_io']['outputs'][:32]
+
+batch_adj, batch_ops = labeled['train_net'][0][:32], labeled['train_net'][1][:32]
+```
+
+```{python}
+ops_recon, adj_recon, mu, logvar, _, outputs = extended_model(batch_ops.to(device), batch_adj.to(device), in_batch.to(device))
+```
+
+```{python}
+outputs.shape
+```
+
+<!-- #region heading_collapsed=true -->
+### Just some tests
+<!-- #endregion -->
+
+```{python hidden=TRUE}
+_,_,_,_,z = model(batch_ops.to(device), batch_adj.to(device))
+z = extended_model.process_z(z)
+z = z.unsqueeze(-1).unsqueeze(-1).repeat(1, 1, in_batch.shape[2], in_batch.shape[3])
+z.shape
+```
+
+```{python hidden=TRUE}
+torch.cat([z, in_batch], dim=1).shape
+```
+
+## Training
+
+```{python}
+labeled_2 = labeled.copy()
+
+omax = labeled_2['train']['outputs'].max()
+labeled_2['train']['outputs'] /= omax
+
+print(labeled_2['train']['outputs'].max())
+```
+
+```{python}
+import torch
+from info_nas.trainer import train
+
+if torch.cuda.is_available():
+    torch.backends.cudnn.benchmark = True
+    device = torch.device('cuda')
+else:
+    device = None
+    
+model = train(labeled_2, unlabeled, nb, checkpoint_path='.', device=device,
+              use_reference_model=True, batch_len_labeled=7)
+```
+
+```{python}
+
+```
+
+```{python}
+model[1]
+```
+
+```{python}
+len(labeled['train_io']['inputs'])
+```
+
+```{python}
+import matplotlib.pyplot as plt
+# %matplotlib notebook
+
+plt.figure()
+plt.imshow(labeled_2['train_io']['outputs'], cmap='hot', interpolation='nearest')
+plt.show()
+```
+
+```{python}
+
+```

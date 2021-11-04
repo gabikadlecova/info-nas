@@ -1,0 +1,75 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.0
+      jupytext_formats: ipynb,Rmd:rmarkdown
+  kernelspec:
+    display_name: bioinf
+    language: python
+    name: bioinf
+---
+
+```{python}
+# %autosave 0
+
+dir_name = '/home/gabi/diplomka/neurips/paper/regressors/'
+```
+
+```{python}
+import os
+
+os.listdir(dir_name)
+```
+
+```{python}
+def process_res_dict(path, seed, algo, model):
+    with open(os.path.join(path, 'Test features - validation accuracy_metrics.txt'), 'r') as f:
+        res_dict = {}
+        for l in f:
+            l = l.split(': ')
+            key = l[0]
+            val = l[1].replace('(', '').replace(')', '').split(', ')[0]
+
+            res_dict[key] = float(val)
+            
+        res_dict['seed'] = seed
+        res_dict['algo'] = algo
+        res_dict['model'] = model
+    
+    return res_dict
+```
+
+```{python}
+import glob
+
+res_df = []
+
+for seed in range(1, 11):
+    for algo in ['gp', 'svr', 'rf', 'rf1000', 'gb']:
+        for model in ['ref', 'orig']:
+            p = os.path.join(dir_name, f'{algo}_250_{seed}_features_model_{model}_epoch-29.pt')
+
+            res = process_res_dict(p, seed, algo, model)
+            res_df.append(res)
+```
+
+```{python}
+len(res_df)
+```
+
+```{python}
+import pandas as pd
+
+res_dfs = pd.DataFrame(res_df)
+results_table = res_dfs[['model', 'algo', 'RMSE', 'Pearson\'s r']].groupby(
+    ['algo', 'model']).std().round(2)
+print(results_table.to_latex())
+```
+
+```{python}
+
+```

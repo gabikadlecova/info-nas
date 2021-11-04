@@ -1,0 +1,197 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.0
+      jupytext_formats: ipynb,Rmd:rmarkdown
+  kernelspec:
+    display_name: bioinf
+    language: python
+    name: bioinf
+---
+
+```{python}
+# %autosave 0
+```
+
+```{python}
+import pickle
+
+from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset, split_off_valid
+from info_nas.datasets.io.semi_dataset import labeled_network_dataset
+from info_nas.datasets.io.transforms import get_transforms, get_all_scales
+from info_nas.models.utils import load_extended_vae 
+
+from info_nas.config import local_dataset_cfg, load_json_cfg
+
+scale_cfg = '../configs/model_config.json'
+scale_dir = '../data/scales/'
+
+with open('../data/nasbench.pickle', 'rb') as f:
+    nb = pickle.load(f)
+
+# load all scaling
+scale_cfg = load_json_cfg(scale_cfg)
+
+scale_config = scale_cfg["scale"]
+include_bias = scale_config["include_bias"]
+normalize = scale_config["normalize"]
+multiply_by_weights = scale_config["multiply_by_weights"]
+use_scale_whole = scale_config["scale_whole"]
+
+scale_train, scale_valid, scale_whole = get_all_scales(scale_dir, scale_config)
+print(f"Scale paths: {scale_train}, {scale_valid}, {scale_whole}")
+
+def get_data_loader(dataset, scale_name, split_ratio=0.9):
+    transforms = get_transforms(scale_train if scale_name == "train" else scale_valid,
+                                include_bias, normalize, multiply_by_weights,
+                                scale_whole_path=scale_whole)
+
+    key = 'val' if scale_name == 'valid' else scale_name
+    dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False,
+                                         config=local_dataset_cfg)
+    
+    if scale_name == 'train':
+        larger_part, dataset = split_off_valid(dataset, ratio=split_ratio)
+        dataset = larger_part
+
+    dataset = labeled_network_dataset(dataset, transforms=transforms)
+    data_loader = torch.utils.data.DataLoader(dataset, batch_size=32, shuffle=False,
+                                              num_workers=4)
+    
+    return data_loader
+
+```
+
+```{python}
+test_train = get_data_loader('../data/test_train_long.pt', 'train')
+test_valid = get_data_loader('../data/test_valid_long.pt', 'valid')
+```
+
+```{python}
+import torch
+from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
+
+check_path = '/home/gabi/diplomka/results/with_ref_5/2021-20-07_23-26-03/model_dense_epoch-29.pt'
+
+device = torch.device('cuda')
+
+vae_model, _ = get_arch2vec_model(device=device)
+args = [vae_model, 3, 513]
+model, chdata = load_extended_vae(check_path, args, device=device)
+```
+
+```{python}
+from arch2vec.models.configs import configs
+from info_nas.eval import eval_labeled_validation
+from info_nas.models.losses import losses_dict
+
+loss = losses_dict['L1']()
+
+res_test_train = eval_labeled_validation(model, test_train, device, configs[4], loss)
+res_test_valid = eval_labeled_validation(model, test_valid, device, configs[4], loss)
+```
+
+```{python}
+res_test_train
+```
+
+```{python}
+import glob
+import pandas as pd
+
+
+device = torch.device('cuda')
+loss = losses_dict['L1']()
+res_dict_train = []
+res_dict_valid = []
+
+for i in range(10):
+    seed = i + 1
+    
+    check_path = glob.glob(f'/home/gabi/diplomka/results/with_ref_{seed}/*/model_dense_epoch-29.pt')
+    assert len(check_path) == 1
+    check_path = check_path[0]
+
+    vae_model, _ = get_arch2vec_model(device=device)
+    args = [vae_model, 3, 513]
+    model, chdata = load_extended_vae(check_path, args, device=device)
+    
+    res_test_train = eval_labeled_validation(model, test_train, device, configs[4], loss)
+    res_test_valid = eval_labeled_validation(model, test_valid, device, configs[4], loss)
+    
+    res_test_train['seed'] = seed
+    res_test_valid['seed'] = seed
+    
+    res_dict_train.append(res_test_train)
+    res_dict_valid.append(res_test_valid)
+    
+res_dict_train = pd.DataFrame(res_dict_train)
+res_dict_valid = pd.DataFrame(res_dict_valid)
+```
+
+```{python}
+# TODO heatmapa after shuffle whole train, tady
+```
+
+```{python}
+res_dict_train
+```
+
+```{python}
+import os
+
+baselines = {}
+base_files = ['test_train_long_baseline.csv',
+             'test_valid_long_baseline.csv']
+
+dir_path = '/home/gabi/diplomka/results/with_ref_1/2021-20-07_22-33-41/'
+for baseline in base_files:
+    baseline_path = os.path.join(dir_path, baseline)
+    base_df = pd.read_csv(baseline_path, index_col=0)
+
+    key = 'train' if 'train' in baseline else 'valid'
+    baselines[key] = base_df
+```
+
+```{python}
+baselines
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib notebook
+sns.set()
+
+save_path = '/home/gabi/diplomka/master-thesis/img/info-losses/'
+if not os.path.exists(save_path):
+    os.mkdir(save_path)
+
+titles = [
+    'Distribution of test losses (10 runs) - unseen images',
+    'Distribution of test losses (10 runs) - unseen images and networks'
+]
+
+for res, name, title in zip([res_dict_train, res_dict_valid], ['train', 'valid'], titles):
+    mean = res['val_loss']
+    median = res['val_loss_median']
+    
+    ref_mean = baselines[name].iloc[1]['mean'].round(2)
+    ref_median = baselines[name].iloc[1]['median'].round(2)
+    
+    plt.figure(figsize=(6.2,5))
+    plt.boxplot([mean, median], labels=[f'mean (ref {ref_mean})', f'median (ref {ref_median})'],
+               patch_artist=True)
+    plt.title(title)
+    plt.tight_layout()
+    plt.savefig(os.path.join(save_path, f'boxplots-test-{name}.png'), dpi=500)
+    plt.show()
+```
+
+```{python}
+
+```
