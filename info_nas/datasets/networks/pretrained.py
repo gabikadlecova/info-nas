@@ -37,23 +37,28 @@ def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=No
         now = datetime.now()
         print(now.strftime("%d/%m/%Y %H:%M:%S\n--------------------"))
 
+        # function for periodic checkpointing
+        def periodic_checkpoint(network, metric_dict):
+            save_trained_net(net_hash, network, info=metric_dict, net_args=[num_labels], dir_path=dir_path)
+
         ops, adjacency = get_net_from_hash(net_hash, nasbench)
         net = NBNetwork((adjacency, ops), num_labels)
 
         # train net and save it
         net = net.to(device)
-        net, metrics = pretrain_network_cifar(net, train_set, val_set, test_set,
+        net, metrics = pretrain_network_cifar(net, train_set, val_set, test_set, n_labels=num_labels,
                                               num_tests=n_test, num_epochs=num_epochs, device=device, **kwargs)
 
-        save_trained_net(net_hash, net, info=metrics, net_args=[num_labels], dir_path=dir_path)
+        periodic_checkpoint(net, metrics)
 
 
 def pretrain_network_cifar(net, train_loader, valid_loader, test_loader, num_tests=None, num_epochs=108, device=None,
-                           print_frequency=50, **kwargs):
-
+                           print_frequency=50, save_every_k=None, checkpoint_func=None, **kwargs):
     # TODO will be changed if more metrics needed
     loss, acc, val_loss, val_acc = train(net, train_loader, validation_loader=valid_loader, num_epochs=num_epochs,
-                                         device=device, print_frequency=print_frequency, **kwargs)
+                                         device=device, print_frequency=print_frequency,
+                                         checkpoint_every_k=save_every_k, checkpoint_func=checkpoint_func,
+                                         **kwargs)
 
     test_loss, test_acc = test(net, test_loader, num_tests=num_tests)
 
