@@ -42,6 +42,8 @@ def main(hash, nasbench_path, config_path, out_dir, root, seed, n_seeds, device)
         json.dump(config, f, indent='    ')
 
     nasbench = api.NASBench(nasbench_path)
+    random.seed(seed)
+    torch.manual_seed(seed)
     dataset = prepare_dataset(root=root, random_state=seed, **config['cifar-10'])
 
     for i in range(n_seeds):

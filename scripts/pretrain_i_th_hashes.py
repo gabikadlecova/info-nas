@@ -1,3 +1,5 @@
+import random
+
 import click
 import json
 import os
@@ -45,6 +47,9 @@ def main(hashes_dir, chunk_no, prefix, nasbench_path, config_path, root, seed, d
         json.dump(config, f, indent='    ')
 
     nasbench = api.NASBench(nasbench_path)
+
+    random.seed(seed)
+    torch.manual_seed(seed)
     dataset = prepare_dataset(root=root, random_state=seed, **config['cifar-10'])
 
     pretrain_network_dataset(hash_list, nasbench, dataset, device=device, dir_path=out_dir,

@@ -1,4 +1,5 @@
 import math
+import random
 from typing import List, Union
 
 import numpy as np
@@ -241,7 +242,7 @@ def _create_or_load_labeled(nasbench, dataset, pretrained_paths, labeled_path, u
         labeled = load_io_dataset(labeled_path)
     else:
         if isinstance(dataset, str):
-            dataset = prepare_dataset(root=dataset, random_state=seed, **config['cifar-10'])
+            dataset = prepare_dataset(root=dataset, random_state=seed, no_valid_transform=False, **config['cifar-10'])
 
         # check all folders for pretrain files
         for path in pretrained_paths:
