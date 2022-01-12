@@ -7,7 +7,8 @@ import torchvision
 from nasbench import api
 
 from info_nas.config import local_dataset_cfg
-from info_nas.datasets.io.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path
+from info_nas.datasets.io.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path, \
+    MultByWeights
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
 
@@ -42,8 +43,11 @@ def main(scale_name, scale_dir, dataset, nasbench_path, axis, axis_bef, normaliz
     if include_bias:
         transforms.append(IncludeBias())
 
+    if multiply_by_weights:
+        transforms.append(MultByWeights(include_bias=include_bias))
+
     scale_path = get_scale_path(scale_dir, scale_name, include_bias, per_label, weighted, axis_bef)
-    scaler = load_scaler(scale_path, normalize_bef, include_bias, multiply_by_weights)
+    scaler = load_scaler(scale_path, normalize_bef, include_bias)
     transforms.append(scaler)
 
     transforms.append(SortByWeights())
