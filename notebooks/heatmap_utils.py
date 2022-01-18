@@ -1,19 +1,21 @@
 import numpy as np
 import seaborn as sns
-import matplotlib.pyplot as plt
 import torch
 import torchvision
 from info_nas.datasets.io.transforms import IncludeBias, MultByWeights, SortByWeights
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
+from info_nas.datasets.io.semi_dataset import labeled_network_dataset
 
 
-def get_pred_and_orig(gen, model=None, print_freq=1000):
+def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
     orig = []
     pred = []
     info = []
     weights = []
     labels = []
 
+    if device is None:
+        device = torch.device('cpu')
 
     for i, batch in enumerate(gen):
         if i % print_freq == 0:
@@ -45,7 +47,6 @@ def get_pred_and_orig(gen, model=None, print_freq=1000):
 def get_labeled_data(data_pt, nasbench, nb_dataset, input_dataset, top_k=None):
     transforms = [IncludeBias(), MultByWeights(include_bias=True), SortByWeights(return_top_n=top_k)]
     transforms = torchvision.transforms.Compose(transforms)
-
 
     data, _ = prepare_labeled_dataset(data_pt, nasbench, device=torch.device('cpu'),
                                       nb_dataset=nb_dataset, dataset=input_dataset, remove_labeled=False)
