@@ -10,7 +10,7 @@ from info_nas.datasets.io.semi_dataset import labeled_network_dataset
 def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
     orig = []
     pred = []
-    info = []
+    info = {k: [] for k in ['label', 'hash', 'ref_id']}
     weights = []
     labels = []
 
@@ -21,7 +21,8 @@ def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
         if i % print_freq == 0:
             print(f"Batch {i}")
 
-        info.append({w: batch[w] for w in ['label', 'hash', 'ref_id']})
+        for w in ['label', 'hash', 'ref_id']:
+            info[w].extend(batch[w])
 
         b = batch['adj'], batch['ops'], batch['input'], batch['output']
 
