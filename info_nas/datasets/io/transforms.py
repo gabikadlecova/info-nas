@@ -26,7 +26,10 @@ def get_transforms(scale_path, include_bias, normalize, multiply_by_weights, sca
         assert 'include_bias' in scale_path
         transforms.append(IncludeBias())
 
-    scaler = load_scaler(scale_path, normalize, include_bias, multiply_by_weights)
+    if multiply_by_weights:
+        transforms.append(MultByWeights(include_bias=include_bias))
+
+    scaler = load_scaler(scale_path, normalize, include_bias)
     transforms.append(scaler)
 
     transforms.append(SortByWeights(after_sort_scale=scale_whole_path))
@@ -36,12 +39,11 @@ def get_transforms(scale_path, include_bias, normalize, multiply_by_weights, sca
     return transforms
 
 
-def load_scaler(scale_path, normalize, include_bias, multiply_by_weights):
+def load_scaler(scale_path, normalize, include_bias):
     per_label = 'per_label' in scale_path
     weighted = 'weighted' in scale_path
 
-    scaler = Scaler(normalize=normalize, per_label=per_label, weighted=weighted, include_bias=include_bias,
-                    mult_by_weights=multiply_by_weights)
+    scaler = Scaler(normalize=normalize, per_label=per_label, weighted=weighted, include_bias=include_bias)
     scaler.load_fit(scale_path)
     return scaler
 
@@ -134,12 +136,31 @@ class SortByWeights:
         return item
 
 
+def get_weights(item, label, include_bias=True):
+    weights = item['weights'][label]
+
+    if include_bias:
+        bias = item['bias'][label]
+        weights = torch.cat([weights, bias.unsqueeze(-1)])
+
+    return weights
+
+
+class MultByWeights:
+    def __init__(self, include_bias=True):
+        self.include_bias = include_bias
+
+    def __call__(self, item):
+        label = item['label']
+        item['output'] *= get_weights(item, label, include_bias=self.include_bias)
+        return item
+
+
 class Scaler:
     """
     Scales the outputs of every network.
     """
-    def __init__(self, net_scales=None, per_label=False, normalize=False, axis=None, mult_by_weights=True,
-                 weighted=False, include_bias=True):
+    def __init__(self, net_scales=None, per_label=False, normalize=False, axis=None, weighted=False, include_bias=True):
         """
         Initializes the scaling transform.
 
@@ -148,7 +169,6 @@ class Scaler:
             per_label: Use separate scales for every label.
             normalize: If True, normalize, if False, min max scale.
             axis: Axis for the scaling.
-            mult_by_weights: Multiply the outputs by weights.
             weighted: Scale the weighted data, not the original outputs.
             include_bias: Include bias when scaling and/or multiplying by weights.
         """
@@ -160,7 +180,6 @@ class Scaler:
         self.include_bias = include_bias
 
         self.weighted = weighted
-        self.mult_by_weights = mult_by_weights
 
         self.net_scales = net_scales
 
@@ -206,7 +225,7 @@ class Scaler:
 
             # multiply by label weights
             if self.weighted:
-                weights = self._get_weights(net_repo[net_hash], weight_label).numpy()
+                weights = get_weights(net_repo[net_hash], weight_label, include_bias=self.include_bias).numpy()
                 filtered *= weights
 
             mean, std = np.mean(filtered, axis=self.axis), np.std(filtered, axis=self.axis)
@@ -216,15 +235,6 @@ class Scaler:
 
         return scales
 
-    def _get_weights(self, item, label):
-        weights = item['weights'][label]
-
-        if self.include_bias:
-            bias = item['bias'][label]
-            weights = torch.cat([weights, bias.unsqueeze(-1)])
-
-        return weights
-
     def __call__(self, item):
         if self.net_scales is None:
             raise ValueError("The Scaler is not fitted with scale values.")
@@ -232,9 +242,6 @@ class Scaler:
         net_hash = item['hash']
         output = item['output']
         label = item['label'].item()
-
-        if self.mult_by_weights:
-            output *= self._get_weights(item, label)
 
         scales = self.net_scales[label][net_hash] if self.per_label or self.weighted else self.net_scales[net_hash]
 
