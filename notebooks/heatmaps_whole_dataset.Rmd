@@ -6,4 +6,151 @@ jupyter:
       format_name: rmarkdown
       format_version: '1.2'
       jupytext_version: 1.13.2
+  kernelspec:
+    display_name: Python 3 (ipykernel)
+    language: python
+    name: python3
 ---
+
+```{python}
+# %autosave 0
+
+import torch
+
+seed = 1
+```
+
+```{python}
+import os
+
+
+data_dir = '/home/suchoparova/optdata/diplomka/'
+print(os.listdir(data_dir))
+
+
+def from_data(path, data=True):
+    return os.path.join(data_dir, 'data' if data else '', path)
+```
+
+```{python}
+from nasbench import api
+
+nasbench_path = os.path.join(data_dir, 'data/nasbench_only108.tfrecord')
+nb = api.NASBench(nasbench_path)
+```
+
+```{python}
+nb_dataset = from_data('nb_dataset.json')
+cifar = from_data('cifar')
+```
+
+```{python}
+torch.multiprocessing.set_sharing_strategy('file_system')
+
+from heatmap_utils import get_labeled_data
+
+
+dataset_pt = from_data('train_long.pt')
+data = get_labeled_data(dataset_pt, nb, nb_dataset, cifar)
+```
+
+```{python}
+from heatmap_utils import get_pred_and_orig
+
+orig, info, weights, labels = get_pred_and_orig(data, device=torch.device('cuda:0'))
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+sns.set()
+
+from heatmap_utils import plot_single_heatmap, heatmap_diff
+
+
+o = orig[:1000]
+
+plot_single_heatmap(o, sub_mean=True, by_row=True, top_k=10)
+plt.show()
+```
+
+```{python}
+o_2 = orig[5000:6000]
+
+plot_single_heatmap(o_2, sub_mean=True, by_row=True, top_k=5)
+plt.show()
+
+heatmap_diff(o, o_2, sub_mean=True, by_row=True, plot_it=True, use_sq=True, top_k=10)
+plt.show()
+```
+
+```{python}
+import itertools
+
+k = 0
+n_nets = 608
+print_freq = 1000
+
+res_matrix = np.zeros((n_nets, n_nets))
+
+for i, j in itertools.combinations(range(n_nets), 2):
+    if k % print_freq == 0:
+        print(i, j)
+    k += 1
+        
+    if i == j:
+        continue
+
+    o = orig[i * 1000:(i + 1) * 1000]
+    o_2 = orig[j * 1000:(j + 1) * 1000]
+    diff = heatmap_diff(o, o_2, sub_mean=True, div_by_sigma=True, by_row=True, plot_it=False, use_sq=True, top_k=10)
+    
+    diff = np.sum(diff, axis=1)
+    diff = diff.mean()
+    
+    res_matrix[i, j] = diff
+```
+
+```{python}
+from heatmap_utils import plot_hist
+
+
+plot_hist(res_matrix.flatten())
+plt.show()
+```
+
+```{python}
+for i, j in itertools.combinations(range(n_nets), 2):
+    res_matrix[j, i] = max(res_matrix[i, j], 0)
+```
+
+```{python}
+plot_single_heatmap(res_matrix)
+plt.show()
+```
+
+```{python}
+np.unique(np.argmax(res_matrix, axis=0))
+```
+
+```{python}
+plot_single_heatmap(orig[462000:(463000)], sub_mean=True, div_by_sigma=True, by_row=True, top_k=30)
+plt.show()
+```
+
+```{python}
+plot_single_heatmap(orig[:1000], sub_mean=True, div_by_sigma=True, by_row=True, top_k=30, vmax=20)
+plt.show()
+```
+
+```{python}
+nb.get_metrics_from_hash(info['hash'][0])
+```
+
+```{python}
+nb.get_metrics_from_hash(info['hash'][462000])
+```
+
+```{python}
+
+```
