@@ -57,7 +57,7 @@ data = get_labeled_data(dataset_pt, nb, nb_dataset, cifar)
 ```{python}
 from heatmap_utils import get_pred_and_orig
 
-orig, info, weights, labels = get_pred_and_orig(data, device=torch.device('cuda:0'))
+orig, info, weights, labels = get_pred_and_orig(data, device=torch.device('cpu'))
 ```
 
 ```{python}
@@ -85,13 +85,45 @@ plt.show()
 ```
 
 ```{python}
+orig.shape
+```
+
+```{python}
+import numpy as np
+
+norm_orig = (orig - np.mean(orig, axis=0)) / np.std(orig, axis=0)
+```
+
+```{python}
+o = norm_orig[:1000]
+o_2 = norm_orig[5000:6000]
+
+plot_single_heatmap(o, sub_mean=True, by_row=True, top_k=5)
+plt.show()
+plot_single_heatmap(o_2, sub_mean=True, by_row=True, top_k=5)
+plt.show()
+
+heatmap_diff(o, o_2, sub_mean=True, by_row=True, plot_it=True, use_sq=True, top_k=10)
+plt.show()
+```
+
+```{python}
 import itertools
+import numpy as np
 
 k = 0
 n_nets = 608
+# n_nets = 100
 print_freq = 1000
+normalize_columns = False
+top_k = 10
+
+from_feats = norm_orig if normalize_columns else orig
 
 res_matrix = np.zeros((n_nets, n_nets))
+
+divsigma = False
+submean = False
 
 for i, j in itertools.combinations(range(n_nets), 2):
     if k % print_freq == 0:
@@ -101,9 +133,9 @@ for i, j in itertools.combinations(range(n_nets), 2):
     if i == j:
         continue
 
-    o = orig[i * 1000:(i + 1) * 1000]
-    o_2 = orig[j * 1000:(j + 1) * 1000]
-    diff = heatmap_diff(o, o_2, sub_mean=True, div_by_sigma=True, by_row=True, plot_it=False, use_sq=True, top_k=10)
+    o = from_feats[i * 1000:(i + 1) * 1000]
+    o_2 = from_feats[j * 1000:(j + 1) * 1000]
+    diff = heatmap_diff(o, o_2, sub_mean=submean, div_by_sigma=divsigma, by_row=True, plot_it=False, use_sq=True, top_k=top_k)
     
     diff = np.sum(diff, axis=1)
     diff = diff.mean()
@@ -115,7 +147,9 @@ for i, j in itertools.combinations(range(n_nets), 2):
 from heatmap_utils import plot_hist
 
 
+plt.title(f"Error histogram with sigma division turned {'on' if divsigma else 'off'}")
 plot_hist(res_matrix.flatten())
+plt.xlim(0, 5)
 plt.show()
 ```
 
@@ -125,21 +159,93 @@ for i, j in itertools.combinations(range(n_nets), 2):
 ```
 
 ```{python}
+plt.figure(figsize=(12, 12))
 plot_single_heatmap(res_matrix)
 plt.show()
 ```
 
 ```{python}
-np.unique(np.argmax(res_matrix, axis=0))
-```
-
-```{python}
-plot_single_heatmap(orig[462000:(463000)], sub_mean=True, div_by_sigma=True, by_row=True, top_k=30)
+plt.figure(figsize=(15,15))
+plot_single_heatmap((res_matrix < 0.3).astype(int))
 plt.show()
 ```
 
 ```{python}
-plot_single_heatmap(orig[:1000], sub_mean=True, div_by_sigma=True, by_row=True, top_k=30, vmax=20)
+
+```
+
+```{python}
+from sklearn.cluster import AgglomerativeClustering
+
+thres = 0.4
+
+
+km = AgglomerativeClustering(n_clusters=None, linkage='complete', affinity='precomputed', distance_threshold=thres)
+res = km.fit_predict(res_matrix)
+```
+
+```{python}
+uniq = np.unique(res, return_counts=True)
+print(uniq)
+print(sum(uniq[1] == 1))
+```
+
+```{python}
+cls = 2
+print(np.arange(n_nets)[res == cls])
+```
+
+```{python}
+def get_net_accuracy(net_id, what='test'):
+    what = f"final_{what}_accuracy"
+    
+    net_hash = info['hash'][net_id * 1000]
+    metrics = nb.get_metrics_from_hash(net_hash)
+    
+    return np.mean([m[what] for m in metrics[1][108]])
+```
+
+```{python}
+accs = [get_net_accuracy(i, what='test') for i in range(n_nets)]
+print("mean ", np.mean(accs), "| std ", np.std(accs))
+```
+
+```{python}
+import pandas as pd
+
+
+acc_df = []
+
+for cluster_no, cluster_size in zip(*np.unique(res, return_counts=True)):
+    if cluster_size == 1:
+        continue
+    
+    print(cluster_no, cluster_size)
+    
+    net_ids = [i for i, v in enumerate(res) if v == cluster_no]
+    #print(net_ids)
+    accs = [get_net_accuracy(i, what='test') for i in net_ids]
+    
+    if cluster_size > 2:
+        
+        for a in accs:
+            acc_df.append({'cluster': cluster_no, 'acc': a})
+    
+    print("mean ", np.mean(accs), "| std ", np.std(accs))
+    print()
+    #print(accs)
+    print('----------------')
+    
+acc_df = pd.DataFrame(acc_df)
+```
+
+```{python}
+plt.figure(figsize=(15, 5))
+plt.title(f'Accuracies of networks clustered by {top_k} features, threshold {thres}')
+
+sns.boxplot(data=acc_df, x='cluster', y='acc')
+sns.swarmplot(data=acc_df, x='cluster', y='acc', color=".25")
+plt.ylim(0.7, 1.0)
 plt.show()
 ```
 
