@@ -35,5 +35,10 @@
         "n_workers": 4,
         "n_valid_workers": 0
     },
-    "arch2vec_config": 4
+    "arch2vec_config": 4,
+    "hash_accuracy": {
+        "epoch": 108,
+        "time": "final",
+        "what": "test"
+    }
 }

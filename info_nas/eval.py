@@ -8,6 +8,7 @@ from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniquene
 from arch2vec.utils import preprocessing
 
 from info_nas.models.losses import metrics_dict
+from info_nas.models.utils import get_hash_accuracy
 
 
 def _metrics_list(res_dict, key):
@@ -31,7 +32,7 @@ def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
         )
 
 
-def eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False):
+def eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False, nasbench=None):
     if isinstance(validation, dict):
         if return_all_metrics:
             raise ValueError("Can return only summary metrics for multiple validation sets.")
@@ -40,7 +41,7 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled, ret
         res_dict = {}
 
         for val_name, val_set in validation.items():
-            metrics = _eval_labeled_validation(model, val_set, device, config, loss_labeled)
+            metrics = _eval_labeled_validation(model, val_set, device, config, loss_labeled, nasbench=nasbench)
             metrics = {f"{val_name}-{k}": v for k, v in metrics.items()}
             res_dict.update(metrics)
 
@@ -48,23 +49,31 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled, ret
     else:
         # there is only one validation set
         return _eval_labeled_validation(model, validation, device, config, loss_labeled,
-                                        return_all_metrics=return_all_metrics)
+                                        return_all_metrics=return_all_metrics, nasbench=nasbench)
 
 
-def _eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False):
+def _eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False, nasbench=None):
     loss_m = {"val_loss": []}
     metrics = {k: [] for k in metrics_dict.keys()}
     metrics = {**loss_m, **metrics}
 
     print(f"Evaluating model on labeled validation set ({len(validation)} batches).")
     for batch in validation:
-        adj, ops, inputs, outputs = batch[:4]
-        adj, ops = adj.to(device), ops.to(device)
-        adj, ops, prep_reverse = preprocessing(adj, ops, **config['prep'])
 
-        inputs, outputs = inputs.to(device), outputs.to(device)
+        if isinstance(batch, dict):
+            adj, ops = batch['adj'], batch['ops']
+            adj, ops = adj.to(device), ops.to(device)
+            model_out = model(ops, adj)
 
-        model_out = model(ops, adj.to(torch.long), inputs)
+            outputs = get_hash_accuracy(batch['hash'], nasbench, config)
+        else:
+            adj, ops, inputs, outputs = batch[:4]
+            adj, ops = adj.to(device), ops.to(device)
+            adj, ops, prep_reverse = preprocessing(adj, ops, **config['prep'])
+
+            inputs, outputs = inputs.to(device), outputs.to(device)
+
+            model_out = model(ops, adj.to(torch.long), inputs)
 
         assert len(model_out) == 6  # TODO could differ
         outs_recon = model_out[-1]
@@ -122,7 +131,7 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
         # labeled only eval
         if m_name == 'labeled':
-            val_metrics = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled)
+            val_metrics = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled, nasbench=nasbench)
             for val_m_name, val_m_loss in val_metrics.items():
                 _metrics_list(metrics_res_dict[m_name], val_m_name).append(val_m_loss)
                 if verbose > 1:

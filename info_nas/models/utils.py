@@ -1,5 +1,6 @@
 import os
 
+import numpy as np
 import torch
 from torch import optim
 
@@ -63,3 +64,12 @@ def get_optimizer(model, name='adam', **kwargs):
         raise ValueError(f"Unsupported optimizer name: {name}")
 
     return optimizer(model.parameters(), **kwargs)
+
+
+def get_hash_accuracy(hash, nasbench, config):
+    metrics = nasbench.get_metrics_from_hash(hash)[1]
+    config = config['hash_accuracy']
+    epoch, time, what = config['epoch'], config['time'], config['what']
+
+    metrics = [m[f"{time}_{what}_accuracy"] for m in metrics[epoch]]
+    return np.mean(metrics)

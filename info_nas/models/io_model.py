@@ -6,7 +6,7 @@ from abc import abstractmethod
 #    a) encode input into a vec
 #    b) the embedding is the second actual input
 #    c) vae of io data first, then dense (u-)net
-from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list
+from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list, get_dense_list
 
 
 class IOModel(nn.Module):
@@ -105,17 +105,7 @@ class DensePredConvModel(IOModel):
         self.concat_dense = nn.Linear(z_hidden + channels, dense_size)
 
         # process concatenated data
-        dense_list = []
-
-        for i in range(n_dense):
-            dense_list.append(nn.ReLU())
-            if dropout is not None:
-                dense_list.append(nn.Dropout(dropout))
-
-            next_size = output_channels if i == n_dense - 1 else dense_size
-            dense_list.append(nn.Linear(dense_size, next_size))
-
-        self.dense_list = nn.Sequential(*dense_list)
+        self.dense_list = get_dense_list(n_dense, dropout, dense_size, output_channels)
 
     def inputs_forward(self, z, inputs):
         x = self.first_conv(inputs)

@@ -45,3 +45,17 @@ def get_conv_list(n_steps, n_convs, channels):
         channels = next_channels
 
     return nn.Sequential(*conv_list), channels
+
+
+def get_dense_list(n_dense, dropout, dense_size, output_channels):
+    dense_list = []
+
+    for i in range(n_dense):
+        dense_list.append(nn.ReLU())
+        if dropout is not None:
+            dense_list.append(nn.Dropout(dropout))
+
+        next_size = output_channels if i == n_dense - 1 else dense_size
+        dense_list.append(nn.Linear(dense_size, next_size))
+
+    return nn.Sequential(*dense_list)
