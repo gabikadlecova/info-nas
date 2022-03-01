@@ -6,17 +6,17 @@ jupyter:
       format_name: rmarkdown
       format_version: '1.2'
       jupytext_version: 1.13.0
-      jupytext_formats: ipynb,Rmd:rmarkdown
   kernelspec:
-    display_name: bioinf
+    display_name: pyt_conda
     language: python
-    name: bioinf
+    name: pyt_conda
 ---
 
 ```{python}
 # %autosave 0
 
-dir_name = '/home/gabi/diplomka/neurips/paper/regressors/'
+#dir_name = '/home/gabi/diplomka/neurips/paper/regressors/'
+dir_name = '/home/gabi/diplomka/code/info-nas/data/vae_checkpoints/2022-19-01_19-00-25/regr'
 ```
 
 ```{python}
@@ -26,8 +26,8 @@ os.listdir(dir_name)
 ```
 
 ```{python}
-def process_res_dict(path, seed, algo, model):
-    with open(os.path.join(path, 'Test features - validation accuracy_metrics.txt'), 'r') as f:
+def process_res_dict(path, seed, algo, model, what='test'):
+    with open(os.path.join(path, f'All features - {what} accuracy_metrics.txt'), 'r') as f:
         res_dict = {}
         for l in f:
             l = l.split(': ')
@@ -46,14 +46,30 @@ def process_res_dict(path, seed, algo, model):
 ```{python}
 import glob
 
+what = 'test'
+use_any = True
+if use_any:
+    samples = "10000"
+    used = "any"
+    title1 = f"Pearson's r for {samples} chosen samples ({what})."
+    title2 = f"RMSE for {samples} chosen samples ({what})."
+else:
+    samples = "None"
+    used = "train"
+    title1 = f"Pearson's r for train samples ({what})."
+    title2 = f"RMSE for train samples ({what})."
+
 res_df = []
 
-for seed in range(1, 11):
-    for algo in ['gp', 'svr', 'rf', 'rf1000', 'gb']:
-        for model in ['ref', 'orig']:
-            p = os.path.join(dir_name, f'{algo}_250_{seed}_features_model_{model}_epoch-29.pt')
+for seed in range(10):
+    for algo in ['rf_tune']:
+        for model in ['infonas_full_emb_4.pt', 'arch2vec_ref_epoch-4.pt', 'accuracy_emb_4.pt']:
+            p = os.path.join(dir_name, f'{algo}_{samples}_{seed}_{used}_{model}')
+            
+            if not os.path.exists(p) or len(os.listdir(p)) < 8:
+                continue
 
-            res = process_res_dict(p, seed, algo, model)
+            res = process_res_dict(p, seed, algo, model, what=what)
             res_df.append(res)
 ```
 
@@ -64,10 +80,34 @@ len(res_df)
 ```{python}
 import pandas as pd
 
-res_dfs = pd.DataFrame(res_df)
-results_table = res_dfs[['model', 'algo', 'RMSE', 'Pearson\'s r']].groupby(
+res_df = pd.DataFrame(res_df)
+results_table = res_df[['model', 'algo', 'RMSE', 'Pearson\'s r']].groupby(
     ['algo', 'model']).std().round(2)
-print(results_table.to_latex())
+res_df.sort_values(['model', 'seed'])
+```
+
+```{python}
+import seaborn as sns
+import matplotlib.pyplot as plt
+sns.set()
+
+plt.title(title1)
+sns.boxplot(data=res_df, x='model', y='Pearson\'s r')
+plt.show()
+
+plt.title(title2)
+sns.boxplot(data=res_df, x='model', y='RMSE')
+plt.show()
+```
+
+```{python}
+res_df.groupby('model').mean().round(4)
+```
+
+```{python}
+import numpy as np
+
+(1.96 / np.sqrt(10) * res_df.groupby('model').std()).round(4)
 ```
 
 ```{python}

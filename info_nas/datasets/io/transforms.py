@@ -86,7 +86,7 @@ class SortByWeights:
     """
     Sorts the outputs by weights corresponding to the inputs label.
     """
-    def __init__(self, fixed_label=None, return_top_n=None, after_sort_scale=None):
+    def __init__(self, fixed_label=None, return_top_n=None, use_all_labels=False, after_sort_scale=None):
         """
         Initializes the sort transform.
 
@@ -97,6 +97,7 @@ class SortByWeights:
         """
         self.fixed_label = fixed_label
         self.return_top_n = return_top_n
+        self.use_all_labels = use_all_labels
 
         if isinstance(after_sort_scale, str):
             with open(after_sort_scale, 'rb') as f:
@@ -116,17 +117,21 @@ class SortByWeights:
         else:
             sort_key = weights
 
-        if self.return_top_n is None:
+        if not self.use_all_labels:
             # sort by target label or one chosen
             sort_key = sort_key[label] if self.fixed_label is None else sort_key[self.fixed_label]
 
             sort_key, indices = torch.sort(sort_key, descending=True)
             output = output[indices].detach()
+
+            output = output if self.return_top_n is None else output[:self.return_top_n]
         else:
-            # return top k features of each per class
+            # features sorted by each label
             sort_key, indices = torch.sort(sort_key, descending=True)
             outputs_all = output[indices].detach()
-            output = outputs_all[:, self.return_top_n].flatten()
+
+            outputs_all = outputs_all if self.return_top_n is None else outputs_all[:, :self.return_top_n]
+            output = outputs_all.flatten()
 
         if self.after_sort_scale is not None:
             mu, std = self.after_sort_scale['mean'], self.after_sort_scale['std']
@@ -147,12 +152,17 @@ def get_weights(item, label, include_bias=True):
 
 
 class MultByWeights:
-    def __init__(self, include_bias=True):
+    def __init__(self, include_bias=True, normalize_row=False):
         self.include_bias = include_bias
+        self.normalize_row = normalize_row
 
     def __call__(self, item):
-        label = item['label']
-        item['output'] *= get_weights(item, label, include_bias=self.include_bias)
+        label, output = item['label'], item['output']
+        output *= get_weights(item, label, include_bias=self.include_bias)
+        if self.normalize_row:
+            output = (output - torch.mean(output)) / torch.std(output)
+
+        item['output'] = output
         return item
 
 

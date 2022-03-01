@@ -25,7 +25,7 @@ def save_extended_vae(dir_name, model, optimizer, epoch, model_class, model_kwar
     torch.save(checkpoint, f_path)
 
 
-def load_extended_vae(model_path, model_args, device=None, optimizer=None):
+def load_extended_vae(model_path, model_args, device=None, optimizer=None, daclass=None):
     """
     Load the checkpoint of the extended model.
 
@@ -40,8 +40,8 @@ def load_extended_vae(model_path, model_args, device=None, optimizer=None):
     """
     checkpoint = torch.load(model_path, map_location=device)
 
-    kwargs = checkpoint['model_kwargs']
-    model_class = model_dict[checkpoint['model_class']]
+    kwargs = checkpoint['model_kwargs'] if daclass is None else {}
+    model_class = model_dict[checkpoint['model_class']] if daclass is None else daclass
     model = model_class(*model_args, **kwargs)
 
     model.load_state_dict(checkpoint['model_state'])
@@ -66,10 +66,10 @@ def get_optimizer(model, name='adam', **kwargs):
     return optimizer(model.parameters(), **kwargs)
 
 
-def get_hash_accuracy(hash, nasbench, config):
-    metrics = nasbench.get_metrics_from_hash(hash)[1]
+def get_hash_accuracy(hash, nasbench, config, device=None):
+    metrics = [nasbench.get_metrics_from_hash(h)[1] for h in hash]
     config = config['hash_accuracy']
     epoch, time, what = config['epoch'], config['time'], config['what']
 
-    metrics = [m[f"{time}_{what}_accuracy"] for m in metrics[epoch]]
-    return np.mean(metrics)
+    metrics = [[m[f"{time}_{what}_accuracy"] for m in m_hash[epoch]] for m_hash in metrics]
+    return torch.Tensor([np.mean(m) for m in metrics]).to(device)

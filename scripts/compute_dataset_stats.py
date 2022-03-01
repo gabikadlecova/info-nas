@@ -6,10 +6,12 @@ import numpy as np
 import pandas as pd
 import torch
 import torch.utils.data
+import torchvision
 
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset, split_off_valid
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
-from info_nas.datasets.io.transforms import get_transforms, get_all_scales
+from info_nas.datasets.io.transforms import get_transforms, get_all_scales, IncludeBias, MultByWeights, SortByWeights, \
+    ToTuple
 from info_nas.models.losses import losses_dict
 from nasbench import api
 
@@ -19,7 +21,6 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 @click.command()
 @click.argument('scale_name')
 @click.option('--dataset', default='../data/train_labeled.pt')
-@click.option('--scale_dir', default='../data/scales/')
 @click.option('--scale_cfg', default='../configs/scale_test_config.json')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
 @click.option('--batch_size', default=32)
@@ -27,7 +28,7 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 @click.option('--config', default=None)
 @click.option('--save_dir', default=None)
 @click.option('--use_larger_part/--use_smaller_part', default=False)
-def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, split_ratio, config, save_dir,
+def main(scale_name, dataset, scale_cfg, nasbench_path, batch_size, split_ratio, config, save_dir,
          use_larger_part):
     """
     Compute the baseline - difference between batches and the mean of a scaled dataset. Output and save stats.
@@ -46,22 +47,17 @@ def main(scale_name, dataset, scale_dir, scale_cfg, nasbench_path, batch_size, s
 
     scale_cfg = load_json_cfg(scale_cfg)
 
-    # load all scaling
-    scale_config = scale_cfg["scale"]
-    include_bias = scale_config["include_bias"]
-    normalize = scale_config["normalize"]
-    multiply_by_weights = scale_config["multiply_by_weights"]
-    use_scale_whole = scale_config["scale_whole"]
+    def experiment_transforms():
+        transforms = []
+        transforms.append(IncludeBias())
+        nr = scale_cfg['scale'].get('normalize_row', False)
+        transforms.append(MultByWeights(include_bias=True, normalize_row=nr))
+        top_k = scale_cfg['scale'].get('top_k', None)
+        transforms.append(SortByWeights(return_top_n=top_k, after_sort_scale=None))
+        transforms.append(ToTuple())
+        return torchvision.transforms.Compose(transforms)
 
-    for k, v in scale_config.items():
-        print(f"{k}: {v}")
-
-    scale_train, scale_valid, scale_whole = get_all_scales(scale_dir, scale_config)
-    scale_whole = scale_whole if use_scale_whole else None
-    print(f"Scale paths: {scale_train}, {scale_valid}, {scale_whole}")
-
-    transforms = get_transforms(scale_train if scale_name == "train" else scale_valid, include_bias, normalize,
-                                multiply_by_weights, scale_whole_path=scale_whole)
+    transforms = experiment_transforms()
 
     key = 'val' if scale_name == 'valid' else scale_name
     dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)

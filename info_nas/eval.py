@@ -32,7 +32,8 @@ def eval_vae_validation(mod, valid_set, res_dict, device, config, verbose=2):
         )
 
 
-def eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False, nasbench=None):
+def eval_labeled_validation(model, validation, device, config, model_config, loss_labeled, return_all_metrics=False,
+                            nasbench=None):
     if isinstance(validation, dict):
         if return_all_metrics:
             raise ValueError("Can return only summary metrics for multiple validation sets.")
@@ -41,18 +42,20 @@ def eval_labeled_validation(model, validation, device, config, loss_labeled, ret
         res_dict = {}
 
         for val_name, val_set in validation.items():
-            metrics = _eval_labeled_validation(model, val_set, device, config, loss_labeled, nasbench=nasbench)
+            metrics = _eval_labeled_validation(model, val_set, device, config, model_config, loss_labeled,
+                                               nasbench=nasbench)
             metrics = {f"{val_name}-{k}": v for k, v in metrics.items()}
             res_dict.update(metrics)
 
         return res_dict
     else:
         # there is only one validation set
-        return _eval_labeled_validation(model, validation, device, config, loss_labeled,
+        return _eval_labeled_validation(model, validation, device, config, model_config, loss_labeled,
                                         return_all_metrics=return_all_metrics, nasbench=nasbench)
 
 
-def _eval_labeled_validation(model, validation, device, config, loss_labeled, return_all_metrics=False, nasbench=None):
+def _eval_labeled_validation(model, validation, device, config, model_config, loss_labeled, return_all_metrics=False,
+                             nasbench=None):
     loss_m = {"val_loss": []}
     metrics = {k: [] for k in metrics_dict.keys()}
     metrics = {**loss_m, **metrics}
@@ -65,7 +68,7 @@ def _eval_labeled_validation(model, validation, device, config, loss_labeled, re
             adj, ops = adj.to(device), ops.to(device)
             model_out = model(ops, adj)
 
-            outputs = get_hash_accuracy(batch['hash'], nasbench, config)
+            outputs = get_hash_accuracy(batch['hash'], nasbench, model_config, device=device)
         else:
             adj, ops, inputs, outputs = batch[:4]
             adj, ops = adj.to(device), ops.to(device)
@@ -94,7 +97,8 @@ def _eval_labeled_validation(model, validation, device, config, loss_labeled, re
 
 
 def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losses_total, losses_epoch, epoch, device,
-               nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_labeled, verbose=2):
+               nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, model_config, loss_labeled,
+               verbose=2):
     model.eval()
     model_labeled.eval()
     if model_reference is not None:
@@ -131,7 +135,8 @@ def eval_epoch(model, model_labeled, model_reference, metrics_res_dict, Z, losse
 
         # labeled only eval
         if m_name == 'labeled':
-            val_metrics = eval_labeled_validation(m, valid_labeled, device, config, loss_labeled, nasbench=nasbench)
+            val_metrics = eval_labeled_validation(m, valid_labeled, device, config, model_config, loss_labeled,
+                                                  nasbench=nasbench)
             for val_m_name, val_m_loss in val_metrics.items():
                 _metrics_list(metrics_res_dict[m_name], val_m_name).append(val_m_loss)
                 if verbose > 1:

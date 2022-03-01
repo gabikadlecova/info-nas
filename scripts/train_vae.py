@@ -5,9 +5,12 @@ import pickle
 
 import click
 import torch
+import torchvision.transforms
+from info_nas.models.accuracy_model import train_as_infonas
 
 from info_nas.config import load_json_cfg, local_model_cfg
-from info_nas.datasets.io.transforms import get_transforms, get_all_scales
+from info_nas.datasets.io.transforms import get_transforms, get_all_scales, IncludeBias, MultByWeights, ToTuple, \
+    SortByWeights
 
 from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
 from nasbench import api
@@ -23,7 +26,6 @@ from info_nas.trainer import train
               help="Path to the saved validation (unseen networks) IO dataset.")
 @click.option('--unseen_valid_path', default='../data/test_train_long.pt',
               help="Path to the saved validation (unseen images) IO dataset.")
-@click.option('--scale_dir', default='../data/scales/', help="Directory where the scaler fit data is stored.")
 @click.option('--checkpoint_path', default='../data/vae_checkpoints/',
               help="Checkpoint directory; the checkpoint is created in a subdirectory named by the current timestamp.")
 @click.option('--nasbench_path', default='../data/nasbench.pickle',
@@ -42,12 +44,17 @@ from info_nas.trainer import train
                    "(ratio 0.1) from it.")
 @click.option('--use_unseen_data/--no_unseen_data', default=True,
               help="If True, use the unseen image validation set, if False, do not use it.")
+@click.option('--use_accuracy/--use_io_data', default=False,
+              help="If True, run semi supervised accuracy prediction instead.")
+@click.option('--deterministic/--deterministic_off', default=False,
+              help="Set torch and cudnn deterministic.")
 @click.option('--device', default='cuda', help="Device for the training.")
 @click.option('--seed', default=1, help="Seed to use.")
 @click.option('--batch_size', default=32, help="Batch size for both labeled and unlabeled batches.")
 @click.option('--epochs', default=7, help="Number of training epochs.")
-def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, nasbench_path, nb_dataset, cifar,
-        model_cfg, use_ref, test_is_splitted, use_unseen_data, device, seed, batch_size, epochs):
+def run(train_path, valid_path, unseen_valid_path, checkpoint_path, nasbench_path, nb_dataset, cifar,
+        model_cfg, use_ref, test_is_splitted, use_unseen_data, use_accuracy, deterministic, device,
+        seed, batch_size, epochs):
     """
     Run the training of the info-NAS model.
     """
@@ -77,25 +84,25 @@ def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, n
                                                         test_labeled_train_path=unseen_valid_path,
                                                         test_valid_split=None if test_is_splitted else 0.1)
 
-    # load all scaling
-    scale_config = model_cfg["scale"]
-    include_bias = scale_config["include_bias"]
-    normalize = scale_config["normalize"]
-    mult_by_weights = scale_config["multiply_by_weights"]
-    use_scale_whole = scale_config["scale_whole"]
+    def experiment_transforms():
+        transforms = []
+        transforms.append(IncludeBias())
+        nr = model_cfg['scale'].get('normalize_row', False)
+        transforms.append(MultByWeights(include_bias=True, normalize_row=nr))
+        top_k = model_cfg['scale'].get('top_k', None)
+        transforms.append(SortByWeights(return_top_n=top_k, after_sort_scale=None))
+        if not use_accuracy:
+            transforms.append(ToTuple())
+        return torchvision.transforms.Compose(transforms)
 
-    scale_train, scale_valid, scale_whole = get_all_scales(scale_dir, scale_config)
-    scale_whole = scale_whole if use_scale_whole else None
-    print(f"Scale paths: {scale_train}, {scale_valid}, {scale_whole}")
+    transforms = experiment_transforms()
+    val_transforms = experiment_transforms()
 
-    transforms = get_transforms(scale_train, include_bias, normalize, mult_by_weights, scale_whole_path=scale_whole)
-    val_transforms = get_transforms(scale_valid, include_bias, normalize, mult_by_weights, scale_whole_path=scale_whole)
-
-    timestamp = datetime.datetime.now().strftime('%Y-%d-%m_%H-%M-%S')
+    timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     if not os.path.exists(checkpoint_path):
         os.mkdir(checkpoint_path)
 
-    checkpoint_path = os.path.join(checkpoint_path, timestamp)
+    checkpoint_path = os.path.join(checkpoint_path, f"{timestamp}_seed_{seed}_bs_{batch_size}")
     os.mkdir(checkpoint_path)
 
     # save config
@@ -103,10 +110,18 @@ def run(train_path, valid_path, unseen_valid_path, scale_dir, checkpoint_path, n
     with open(config_path, 'w+') as f:
         json.dump(model_cfg, f, indent=4)
 
-    model, metrics, loss = train(labeled, unlabeled, nb, transforms=transforms, valid_transforms=val_transforms,
-                                 checkpoint_dir=checkpoint_path, device=device, use_reference_model=use_ref,
-                                 batch_len_labeled=4, model_config=model_cfg,
-                                 batch_size=batch_size, seed=seed, epochs=epochs)
+    if use_accuracy:
+        model, metrics, loss = train_as_infonas(labeled, unlabeled, nb, transforms=transforms,
+                                                valid_transforms=val_transforms,
+                                                checkpoint_dir=checkpoint_path, device=device, model_config=model_cfg,
+                                                batch_size=batch_size, seed=seed, epochs=epochs,
+                                                torch_deterministic=deterministic, cudnn_deterministic=deterministic)
+    else:
+        model, metrics, loss = train(labeled, unlabeled, nb, transforms=transforms, valid_transforms=val_transforms,
+                                     checkpoint_dir=checkpoint_path, device=device, use_reference_model=use_ref,
+                                     batch_len_labeled=4, model_config=model_cfg,
+                                     batch_size=batch_size, seed=seed, epochs=epochs,
+                                     torch_deterministic=deterministic, cudnn_deterministic=deterministic)
 
     with open(os.path.join(checkpoint_path, 'metrics.pickle'), 'wb') as f:
         pickle.dump(metrics, f)

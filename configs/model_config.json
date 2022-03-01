@@ -15,19 +15,14 @@
     },
     "scale": {
         "include_bias": true,
-        "axis": null,
-        "after_axis": 0,
-        "normalize": true,
-        "weighted": false,
-        "per_label": false,
-        "multiply_by_weights": true,
-        "scale_whole": true
+        "top_k": 10,
+        "normalize_row": false
     },
-    "out_channels": 513,
-    "loss": "L1",
+    "out_channels": 10,
+    "loss": "MSE",
     "loss_kwargs": {},
     "loss_vae_weight": 1.0,
-    "checkpoint": 5,
+    "checkpoint": 1,
     "dataset_config": {
         "k": 300,
         "coef_k": 0.33,

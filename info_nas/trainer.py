@@ -146,8 +146,8 @@ def train(labeled, unlabeled, nasbench, checkpoint_dir, transforms=None, valid_t
 
         # epoch stats
         eval_epoch(model, model_labeled, model_ref, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                   device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_func_labeled,
-                   verbose=verbose)
+                   device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, model_config,
+                   loss_func_labeled, verbose=verbose)
 
         metrics_total['running_time'].append(time.process_time() - start_time)
 

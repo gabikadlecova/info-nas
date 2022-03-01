@@ -19,18 +19,21 @@ class AccuracyModel(nn.Module):
         super().__init__()
         self.vae_model = vae_model
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
+
+        self.first_dense = nn.Linear(z_hidden, n_hidden)
         self.dense_list = get_dense_list(n_dense, dropout, n_hidden, 1)
 
         self.activation = None if is_log_accuracy else nn.Sigmoid()
 
     def predict_accuracy(self, z):
         z = self.process_z(z)
+        z = self.first_dense(z)
         z = self.dense_list(z)
 
         if self.activation is not None:
             z = self.activation(z)
 
-        return z
+        return z.flatten()
 
     def forward(self, ops, args):
         ops_recon, adj_recon, mu, logvar, z = self.vae_model.forward(ops, args)
@@ -108,15 +111,15 @@ def train_as_infonas(labeled, unlabeled, nasbench, checkpoint_dir, transforms=No
                 if isinstance(batch, dict):
                     net_hash = batch['hash']
                     batch = batch['adj'], batch['ops']
-                    batch_acc = get_hash_accuracy(net_hash, nasbench, config)
+                    batch_acc = get_hash_accuracy(net_hash, nasbench, model_config, device=device)
 
-                    _train_on_batch(model_labeled, batch, optimizer_labeled, device, config, loss_func_vae,
-                                    loss_func_labeled, Z['labeled'], loss_lists_epoch['labeled'],
+                    _train_on_batch(model_labeled, batch, optimizer_labeled, device, config, Z['labeled'],
+                                    loss_func_vae, loss_func_labeled, loss_lists_epoch['labeled'],
                                     loss_vae_weight=weight_vae, accuracy=batch_acc)
                     n_labeled_batches += 1
                 else:
-                    _train_on_batch(model, batch, optimizer, device, config, Z['unlabeled'], loss_func_vae, loss_func_labeled,
-                                    loss_lists_epoch['unlabeled'])
+                    _train_on_batch(model, batch, optimizer, device, config, Z['unlabeled'], loss_func_vae,
+                                    loss_func_labeled, loss_lists_epoch['unlabeled'])
                     n_unlabeled_batches += 1
 
                 # batch stats
@@ -130,8 +133,8 @@ def train_as_infonas(labeled, unlabeled, nasbench, checkpoint_dir, transforms=No
 
             # epoch stats
             eval_epoch(model, model_labeled, None, metrics_total, Z, loss_lists_total, loss_lists_epoch, epoch,
-                       device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, loss_func_labeled,
-                       verbose=verbose)
+                       device, nasbench, valid_unlabeled, valid_labeled, valid_labeled_orig, config, model_config,
+                       loss_func_labeled, verbose=verbose)
 
             metrics_total['running_time'].append(time.process_time() - start_time)
 

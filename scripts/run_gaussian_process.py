@@ -8,6 +8,10 @@ import numpy as np
 import scipy
 import scipy.stats
 import sklearn
+from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
+from arch2vec.models.configs import configs
+from arch2vec.utils import load_json, preprocessing
+from info_nas.models.accuracy_model import AccuracyModel
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.svm import SVR
 from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
@@ -15,6 +19,7 @@ import torch
 from matplotlib import pyplot as plt
 
 from info_nas.datasets.io.create_dataset import load_io_dataset
+from info_nas.models.utils import load_extended_vae
 
 regressor_names = {
     'gp': GaussianProcessRegressor,
@@ -25,6 +30,47 @@ regressor_names = {
     'rf_tune': partial(RandomForestRegressor, n_estimators=200, max_features=4),
     'gb': GradientBoostingRegressor
 }
+
+
+def get_adj_ops(nb_dataset, hashes):
+    nb_dataset = load_json(nb_dataset)
+    hashmap = {j['hash']: i for i, j in nb_dataset.items()}
+    chosen_inds = [hashmap[h] for h in hashes]
+
+    get_it = lambda idx, what: torch.Tensor(nb_dataset[str(idx)][what]).unsqueeze(0).cuda()
+    adj_ops = [(get_it(i, 'module_adjacency'), get_it(i, 'module_operations')) for i in chosen_inds]
+    return adj_ops
+
+
+def pred_with_net(model_path, adj_ops, config=4, device=None, print_freq=1000, batch_size=256):
+    vae_model, _ = get_arch2vec_model(device=device)
+    args = [vae_model]
+    model, _ = load_extended_vae(model_path, args, device=device, daclass=AccuracyModel)
+    cfg = configs[config]
+
+    batch_adj = []
+    batch_ops = []
+    res = []
+    with torch.no_grad():
+        for i, (adj, ops) in enumerate(adj_ops):
+            if i % print_freq == 0:
+                print(i)
+
+            batch_adj.append(adj)
+            batch_ops.append(ops)
+            if len(batch_adj) < batch_size and i != len(adj_ops) - 1:
+                continue
+
+            # construct batch
+            adj, ops = torch.vstack(batch_adj), torch.vstack(batch_ops)
+            batch_adj = []
+            batch_ops = []
+
+            adj, ops, prep_reverse = preprocessing(adj, ops, **cfg['prep'])
+            _, _, _, _, _, acc = model(ops, adj)
+            res.append(acc.detach().cpu().numpy())
+
+    return np.hstack(res).flatten()
 
 
 def fit_eval_gp(train_features, train_accuracies, test_features, regr_name, **kwargs):
@@ -96,13 +142,18 @@ def plot_acc(test_target_acc, test_pred_acc, acc_map, title, save_path):
 @click.option('--use_train/--use_any', default=False,
               help="If True, use train hashes, if False, use unseen networks (from the rest of the NAS-Bench-101).")
 @click.option('--seed', default=1, help="Seed to use.")
-def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed):
+@click.option('--model_path', default=None, help="Use net as a performance predictor instead.")
+@click.option('--nb_dataset', default='../data/nb_dataset.json', help="Arch2vec nasbench dataset save path.")
+@click.option('--device', default=None)
+def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed,
+         model_path, nb_dataset, device):
     """
     Fit and evaluate a performance predictior using the embedded features.
 
     Args: EMB_PATH - Name of the saved features (generated in the arch2vec repository).
     """
     np.random.seed(seed)
+    device = device if device is None else torch.device(device)
 
     f_path = os.path.join(dir_name, emb_path)
     print("load arch2vec from: {}".format(f_path))
@@ -120,6 +171,8 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
         test_acc.append(embedding[ind]['test_accuracy'])
 
     features = torch.stack(features)
+    if 'info' in os.path.basename(f_path):
+        features = features[:, 0]
     print('Loading finished. pretrained embeddings shape: {}'.format(features.shape))
 
     hashes = np.array(hashes)
@@ -152,6 +205,7 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
 
     print(train_features.shape, train_val_acc.shape, train_test_acc.shape)
 
+    test_hashes = hashes[~train_map]
     test_features = features[~train_map]
     test_val_acc = val_acc[~train_map]
     test_test_acc = test_acc[~train_map]
@@ -161,6 +215,7 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
     y = [val_acc, test_val_acc, test_acc, test_test_acc]
     titles = ["All features - validation accuracy", "Test features - validation accuracy",
               "All features - test accuracy", "Test features - test accuracy"]
+    hash_list = [hashes, test_hashes] * 2
 
     if save_dir is None:
         save_dir = dir_name
@@ -169,9 +224,15 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
 
-    for eval_features, eval_acc, train_acc, title in zip(x, y, train_y, titles):
-        preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name,
-                            max_features=max_features, n_estimators=n_estimators)
+    for eval_features, eval_acc, train_acc, title, eval_hashes in zip(x, y, train_y, titles, hash_list):
+        #if 'Test features' in title:
+        #    continue
+        if model_path is not None:
+            adj_ops = get_adj_ops(nb_dataset, eval_hashes)
+            preds = pred_with_net(model_path, adj_ops, device=device)
+        else:
+            preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name,
+                                max_features=max_features, n_estimators=n_estimators)
         print(title)
         print('---------------------')
 

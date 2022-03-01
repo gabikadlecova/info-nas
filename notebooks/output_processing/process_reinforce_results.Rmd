@@ -6,7 +6,6 @@ jupyter:
       format_name: rmarkdown
       format_version: '1.2'
       jupytext_version: 1.13.0
-      jupytext_formats: ipynb,Rmd:rmarkdown
   kernelspec:
     display_name: pyt_conda
     language: python
@@ -14,24 +13,17 @@ jupyter:
 ---
 
 ```{python}
+import torch
+
+torch.cuda.random.get_rng_state()
+#torch.random.get_rng_state()
+```
+
+```{python}
 # %autosave 0
 import os
 
-runs_dir = '/home/gabi/diplomka/results/with_ref_5/2021-20-07_23-26-03/reinforce-runs'
-```
-
-```{python}
-import json
-
-with open(os.path.join(runs_dir, 'run_497_features_model_orig_epoch-9.json'), 'rb') as f:
-    res = json.load(f)
-res.keys()
-```
-
-```{python}
-import pandas as pd
-
-pd.DataFrame(res)
+runs_dir = '/home/gabi/diplomka/code/info-nas/data/vae_checkpoints/2022-19-01_19-00-25/reinforce-runs'
 ```
 
 ```{python}
@@ -46,18 +38,23 @@ def process_one_run(file):
 ```
 
 ```{python}
+import json
 import glob
+import pandas as pd
 
-info_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_orig_epoch-9.json'))
+info_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_infonas*.json'))
 info_9_dfs = [process_one_run(g) for g in info_9_runs]
-info_9_dfs = pd.concat(info_9_dfs, axis=0)
+info_9_dfs = pd.concat(info_9_dfs, axis=0, ignore_index=True)
+info_9_dfs['runtime_shifted'] = info_9_dfs['runtime'] + 138070 * 10 / 12
 info_9_dfs
 ```
 
 ```{python}
-arch_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_ref_epoch-9.json'))
+arch_runs_dir = '/home/gabi/diplomka/diplomka_results/with_ref_5/2021-20-07_23-26-03/reinforce-runs/'
+arch_9_runs = glob.glob(os.path.join(arch_runs_dir, 'run_*_features_model_ref_epoch-9.json'))
 arch_9_dfs = [process_one_run(g) for g in arch_9_runs]
-arch_9_dfs = pd.concat(arch_9_dfs, axis=0)
+arch_9_dfs = arch_9_dfs[:40]
+arch_9_dfs = pd.concat(arch_9_dfs, axis=0, ignore_index=True)
 arch_9_dfs
 ```
 
@@ -167,14 +164,35 @@ arch_29_dfs
 ```{python}
 import matplotlib.pyplot as plt
 import seaborn as sns
-# %matplotlib notebook
+# %matplotlib inline
 
-info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
-arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
+info_9_dfs['rounded_runtime_shifted'] = info_9_dfs['runtime_shifted'].round(decimals=-4)
+arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
 
 plt.figure()
-sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_validation')
-sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_validation')
+sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test', label='info')
+sns.lineplot(data=info_9_dfs, x='rounded_runtime_shifted', y='regret_test', label='info shifted')
+sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test', label='arch')
+
+plt.xscale('log')
+plt.yscale('log')
+plt.show()
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+# %matplotlib inline
+
+info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
+info_9_dfs['rounded_runtime_shifted'] = info_9_dfs['runtime_shifted'].round(decimals=-4)
+arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
+
+plt.figure()
+sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_validation', label='info')
+sns.lineplot(data=info_9_dfs, x='rounded_runtime_shifted', y='regret_validation', label='info shifted')
+sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_validation', label='arch')
 
 plt.xscale('log')
 plt.yscale('log')
@@ -186,12 +204,12 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 # %matplotlib notebook
 
-info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
-arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
+info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
+arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
 
 plt.figure()
-sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_test')
-sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_test')
+sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test')
+sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test')
 
 plt.xscale('log')
 plt.yscale('log')
