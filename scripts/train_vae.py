@@ -19,6 +19,8 @@ from info_nas.trainer import train
 
 
 # @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
+from scripts.utils import experiment_transforms
+
 
 @click.command()
 @click.option('--train_path', default='../data/train_long.pt', help="Path to the saved train IO dataset.")
@@ -84,19 +86,8 @@ def run(train_path, valid_path, unseen_valid_path, checkpoint_path, nasbench_pat
                                                         test_labeled_train_path=unseen_valid_path,
                                                         test_valid_split=None if test_is_splitted else 0.1)
 
-    def experiment_transforms():
-        transforms = []
-        transforms.append(IncludeBias())
-        nr = model_cfg['scale'].get('normalize_row', False)
-        transforms.append(MultByWeights(include_bias=True, normalize_row=nr))
-        top_k = model_cfg['scale'].get('top_k', None)
-        transforms.append(SortByWeights(return_top_n=top_k, after_sort_scale=None))
-        if not use_accuracy:
-            transforms.append(ToTuple())
-        return torchvision.transforms.Compose(transforms)
-
-    transforms = experiment_transforms()
-    val_transforms = experiment_transforms()
+    transforms = experiment_transforms(model_cfg, use_accuracy=use_accuracy)
+    val_transforms = experiment_transforms(model_cfg, use_accuracy=use_accuracy)
 
     timestamp = datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')
     if not os.path.exists(checkpoint_path):

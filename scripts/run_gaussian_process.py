@@ -126,8 +126,6 @@ def plot_acc(test_target_acc, test_pred_acc, acc_map, title, save_path):
 
 @click.command()
 @click.argument('emb_path')
-@click.option('--dir_name', default='.',
-              help="Directory where the features are save in, and where to save the predictor results.")
 @click.option('--save_dir', default=None)
 @click.option('--train_dataset', default='../data/train_long.pt',
               help="Load the train set to get unique hashes. The regressor is fitted either on train nets, or on all "
@@ -145,7 +143,7 @@ def plot_acc(test_target_acc, test_pred_acc, acc_map, title, save_path):
 @click.option('--model_path', default=None, help="Use net as a performance predictor instead.")
 @click.option('--nb_dataset', default='../data/nb_dataset.json', help="Arch2vec nasbench dataset save path.")
 @click.option('--device', default=None)
-def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed,
+def main(emb_path, save_dir, train_dataset, regr_name, max_features, n_estimators, n_hashes, use_train, seed,
          model_path, nb_dataset, device):
     """
     Fit and evaluate a performance predictior using the embedded features.
@@ -155,24 +153,24 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
     np.random.seed(seed)
     device = device if device is None else torch.device(device)
 
-    f_path = os.path.join(dir_name, emb_path)
-    print("load arch2vec from: {}".format(f_path))
+    print("load arch2vec from: {}".format(emb_path))
+    dir_name, emb_base = os.path.split(emb_path)
 
     hashes = []
     features = []
     val_acc = []
     test_acc = []
-    embedding = torch.load(f_path)
+    embedding = torch.load(emb_path)
 
     for ind in range(len(embedding)):
         hashes.append(embedding[ind]['hash'])
-        features.append(embedding[ind]['feature'])
+        features.append(embedding[ind]['feature'].flatten())
         val_acc.append(embedding[ind]['valid_accuracy'])
         test_acc.append(embedding[ind]['test_accuracy'])
 
     features = torch.stack(features)
-    if 'info' in os.path.basename(f_path):
-        features = features[:, 0]
+    #if 'info' in emb_base:
+    #    features = features[:, 0]
     print('Loading finished. pretrained embeddings shape: {}'.format(features.shape))
 
     hashes = np.array(hashes)
@@ -184,15 +182,24 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
     dataset = load_io_dataset(train_dataset)
     unique_train_hashes = np.unique(dataset['net_hashes'])
 
+    def select_outside_train(n):
+        unique_hashes = np.unique(hashes)
+        unique_hashes = unique_hashes[~np.in1d(unique_hashes, unique_train_hashes)]
+        return np.random.choice(unique_hashes, n, replace=False)
+
     if use_train and n_hashes is not None:
-        selected_hashes = np.random.choice(unique_train_hashes, n_hashes, replace=False)
+        if n_hashes < len(unique_train_hashes):
+            selected_hashes = np.random.choice(unique_train_hashes, n_hashes, replace=False)
+        elif n_hashes == len(unique_train_hashes):
+            selected_hashes = unique_train_hashes
+        else:
+            selected_hashes = select_outside_train(n_hashes - len(unique_train_hashes))
+            selected_hashes = np.hstack([selected_hashes, unique_train_hashes])
     elif use_train:
         selected_hashes = unique_train_hashes
     else:
         assert n_hashes is not None, "If selecting random nets from the whole dataset, n_hashes must be specified."
-        unique_hashes = np.unique(hashes)
-        unique_hashes = unique_hashes[~np.in1d(unique_hashes, unique_train_hashes)]
-        selected_hashes = np.random.choice(unique_hashes, n_hashes, replace=False)
+        selected_hashes = select_outside_train(n_hashes)
 
     print(f"Selected {'all' if n_hashes is not None else n_hashes} {'train' if use_train else 'random'} "
           f"hashes for fit.")
@@ -220,23 +227,32 @@ def main(emb_path, dir_name, save_dir, train_dataset, regr_name, max_features, n
     if save_dir is None:
         save_dir = dir_name
 
-    save_dir = os.path.join(save_dir, f'{regr_name}_{n_hashes}_{seed}_{"train" if use_train else "any"}_{emb_path}')
+    emb_name = os.path.basename(emb_path)
+    save_dir = os.path.join(save_dir, f'{regr_name}_{n_hashes}_{seed}_{"train" if use_train else "any"}_{emb_name}')
     if not os.path.exists(save_dir):
         os.mkdir(save_dir)
+
+    if model_path is not None:
+        model_name = os.path.basename(model_path)
+        model_save_dir = os.path.join(
+            save_dir, f'model-prediction_{n_hashes}_{seed}_{"train" if use_train else "any"}_{model_name}'
+        )
 
     for eval_features, eval_acc, train_acc, title, eval_hashes in zip(x, y, train_y, titles, hash_list):
         #if 'Test features' in title:
         #    continue
+        print(title)
+        print('---------------------')
+        plot_map = eval_acc > 0.8
+
+        # use model to predict
         if model_path is not None:
             adj_ops = get_adj_ops(nb_dataset, eval_hashes)
             preds = pred_with_net(model_path, adj_ops, device=device)
-        else:
-            preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name,
-                                max_features=max_features, n_estimators=n_estimators)
-        print(title)
-        print('---------------------')
+            plot_acc(eval_acc, preds, plot_map, title, model_save_dir)
 
-        plot_map = eval_acc > 0.8
+        preds = fit_eval_gp(train_features, train_acc, eval_features, regr_name,
+                            max_features=max_features, n_estimators=n_estimators)
         plot_acc(eval_acc, preds, plot_map, title, save_dir)
 
 

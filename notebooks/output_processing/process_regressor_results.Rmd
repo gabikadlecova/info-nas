@@ -15,19 +15,15 @@ jupyter:
 ```{python}
 # %autosave 0
 
-#dir_name = '/home/gabi/diplomka/neurips/paper/regressors/'
-dir_name = '/home/gabi/diplomka/code/info-nas/data/vae_checkpoints/2022-19-01_19-00-25/regr'
-```
-
-```{python}
 import os
 
-os.listdir(dir_name)
+data_dir = '/home/gabi/diplomka/code/info-nas/data/paper_final_results'
+os.listdir(data_dir)
 ```
 
 ```{python}
 def process_res_dict(path, seed, algo, model, what='test'):
-    with open(os.path.join(path, f'All features - {what} accuracy_metrics.txt'), 'r') as f:
+    with open(os.path.join(path, f'Test features - {what} accuracy_metrics.txt'), 'r') as f:
         res_dict = {}
         for l in f:
             l = l.split(': ')
@@ -47,34 +43,33 @@ def process_res_dict(path, seed, algo, model, what='test'):
 import glob
 
 what = 'test'
-use_any = True
-if use_any:
-    samples = "10000"
-    used = "any"
-    title1 = f"Pearson's r for {samples} chosen samples ({what})."
-    title2 = f"RMSE for {samples} chosen samples ({what})."
-else:
-    samples = "None"
-    used = "train"
-    title1 = f"Pearson's r for train samples ({what})."
-    title2 = f"RMSE for train samples ({what})."
-
 res_df = []
 
-for seed in range(10):
-    for algo in ['rf_tune']:
-        for model in ['infonas_full_emb_4.pt', 'arch2vec_ref_epoch-4.pt', 'accuracy_emb_4.pt']:
-            p = os.path.join(dir_name, f'{algo}_{samples}_{seed}_{used}_{model}')
-            
-            if not os.path.exists(p) or len(os.listdir(p)) < 8:
-                continue
+for train_seed in range(1, 4):
+    for samples in [608, 1000, 2500, 5000, 10000]:
+        for seed in range(10):
+            for algo in ['accuracy', 'info-nas', 'arch2vec_orig']:
+                for model in ['model_dense', 'model_orig', 'model_ref']:
+                    if 'ref' in model and 'acc' in algo:
+                        continue
+                    if algo == 'arch2vec_orig':
+                        if train_seed != 1 or 'ref' not in model:
+                            continue
+                        a2v_name = 'features-original_training_arch2vec_epochs-8.pt'
+                        p = os.path.join(data_dir,
+                                         f'{algo}_seeds',
+                                         f'seed_{train_seed}', 'regr',
+                                         f'rf_tune_{samples}_{seed + 1}_train_{a2v_name}')
+                    else:
+                        p = os.path.join(data_dir,
+                                         f'{algo}_seeds',
+                                         f'seed_{train_seed}', 'regr',
+                                         f'rf_tune_{samples}_{seed + 1}_train_embedding_{model}_epoch-9.pt')
 
-            res = process_res_dict(p, seed, algo, model, what=what)
-            res_df.append(res)
-```
-
-```{python}
-len(res_df)
+                    res = process_res_dict(p, seed, algo, model, what=what)
+                    res['samples'] = samples
+                    res['train_seed'] = train_seed
+                    res_df.append(res)
 ```
 
 ```{python}
@@ -83,7 +78,48 @@ import pandas as pd
 res_df = pd.DataFrame(res_df)
 results_table = res_df[['model', 'algo', 'RMSE', 'Pearson\'s r']].groupby(
     ['algo', 'model']).std().round(2)
-res_df.sort_values(['model', 'seed'])
+```
+
+```{python}
+values_map = {
+    'accuracy': {
+        'model_dense': 'Accuracy Model 1',
+        'model_orig': 'Accuracy Model 2'
+    },
+    'info-nas': {
+        'model_dense': 'IO Model 1',
+        'model_orig': 'IO Model 2',
+        'model_ref': 'arch2vec'
+    },
+    'arch2vec_orig': {
+        'model_ref': 'arch2vec original'
+    }
+}
+
+res_df['Used model'] = ""
+for i in range(len(res_df)):
+    row = res_df.iloc[i]
+    res_df.loc[row.name, 'Used model'] = values_map[row['algo']][row['model']]
+res_df
+```
+
+```{python}
+orig_res_df = res_df.copy()
+```
+
+```{python}
+
+ts = 3
+res_df = orig_res_df[orig_res_df['samples'].isin([608, 2500, 10000]) & ((orig_res_df['train_seed'] == ts) | (orig_res_df['algo'] == 'arch2vec_orig'))]
+```
+
+```{python}
+res_df
+```
+
+```{python}
+cols = ['Used_model']
+res_df.groupby()
 ```
 
 ```{python}
@@ -91,23 +127,29 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 sns.set()
 
-plt.title(title1)
-sns.boxplot(data=res_df, x='model', y='Pearson\'s r')
+save_dir = '/home/gabi/Dropbox/automl-conf/LatexTemplate/img'
+
+plt.figure(figsize=(9,6))
+plt.title('Pearson\'s r by number of train samples')
+sns.boxplot(data=res_df, x='samples', y='Pearson\'s r', hue='Used model')
+plt.savefig(f'{save_dir}/pearson.png')
 plt.show()
 
-plt.title(title2)
-sns.boxplot(data=res_df, x='model', y='RMSE')
+plt.figure(figsize=(9,6))
+plt.title('RMSE by number of train samples')
+sns.boxplot(data=res_df, x='samples', y='RMSE', hue='Used model')
+plt.savefig(f'{save_dir}/rmse.png')
 plt.show()
 ```
 
 ```{python}
-res_df.groupby('model').mean().round(4)
+res_df[res_df['samples'] == 10000].groupby(['Used model', 'samples']).mean().round(4)
 ```
 
 ```{python}
 import numpy as np
 
-(1.96 / np.sqrt(10) * res_df.groupby('model').std()).round(4)
+(1.96 / np.sqrt(10) * res_df[res_df['samples'] == 10000].groupby(['Used model', 'samples']).std()).round(4)
 ```
 
 ```{python}

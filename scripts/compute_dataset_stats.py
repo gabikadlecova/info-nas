@@ -7,6 +7,7 @@ import pandas as pd
 import torch
 import torch.utils.data
 import torchvision
+from arch2vec.utils import load_json
 
 from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset, split_off_valid
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
@@ -16,19 +17,19 @@ from info_nas.models.losses import losses_dict
 from nasbench import api
 
 from info_nas.config import local_dataset_cfg, load_json_cfg
+from scripts.utils import experiment_transforms, get_eval_set
 
 
 @click.command()
-@click.argument('scale_name')
+@click.argument('data_name')
 @click.option('--dataset', default='../data/train_labeled.pt')
-@click.option('--scale_cfg', default='../configs/scale_test_config.json')
+@click.option('--model_cfg', default='../configs/model_config.json')
 @click.option('--nasbench_path', default='../data/nasbench.pickle')
 @click.option('--batch_size', default=32)
 @click.option('--split_ratio', default=None, type=float)
-@click.option('--config', default=None)
 @click.option('--save_dir', default=None)
 @click.option('--use_larger_part/--use_smaller_part', default=False)
-def main(scale_name, dataset, scale_cfg, nasbench_path, batch_size, split_ratio, config, save_dir,
+def main(data_name, dataset, model_cfg, nasbench_path, batch_size, split_ratio, save_dir,
          use_larger_part):
     """
     Compute the baseline - difference between batches and the mean of a scaled dataset. Output and save stats.
@@ -42,42 +43,22 @@ def main(scale_name, dataset, scale_cfg, nasbench_path, batch_size, split_ratio,
     else:
         nb = api.NASBench(nasbench_path)
 
-    if config is None:
-        config = local_dataset_cfg
+    if model_cfg is None:
+        model_cfg = local_dataset_cfg
 
-    scale_cfg = load_json_cfg(scale_cfg)
-
-    def experiment_transforms():
-        transforms = []
-        transforms.append(IncludeBias())
-        nr = scale_cfg['scale'].get('normalize_row', False)
-        transforms.append(MultByWeights(include_bias=True, normalize_row=nr))
-        top_k = scale_cfg['scale'].get('top_k', None)
-        transforms.append(SortByWeights(return_top_n=top_k, after_sort_scale=None))
-        transforms.append(ToTuple())
-        return torchvision.transforms.Compose(transforms)
-
-    transforms = experiment_transforms()
-
-    key = 'val' if scale_name == 'valid' else scale_name
-    dataset, _ = prepare_labeled_dataset(dataset, nb, key=key, remove_labeled=False, config=config)
-    if split_ratio is not None:
-        larger_part, dataset = split_off_valid(dataset, ratio=split_ratio)
-        dataset = larger_part if use_larger_part else dataset
-
-    dataset = labeled_network_dataset(dataset, transforms=transforms)
-
-    data_loader = torch.utils.data.DataLoader(dataset, batch_size=batch_size, shuffle=scale_name == "train",
-                                              num_workers=0)
+    model_cfg = load_json_cfg(model_cfg)
+    transforms = experiment_transforms(model_cfg)
+    data_loader = get_eval_set(data_name, dataset, nb, transforms, batch_size, split_ratio=split_ratio,
+                               use_larger_part=use_larger_part)
 
     print("Loading output dataset...")
     out_data = []
-    for i, item in enumerate(dataset):
+    for i, item in enumerate(data_loader):
         if i % 10000 == 0:
             print(i)
         out_data.append(item[3].numpy())
 
-    out_data = np.array(out_data)
+    out_data = np.vstack(out_data)
     print(out_data.shape)
     print(np.min(out_data))
     print(np.max(out_data))
@@ -120,7 +101,7 @@ def main(scale_name, dataset, scale_cfg, nasbench_path, batch_size, split_ratio,
     if save_dir is not None:
         df = pd.DataFrame(df)
         out_name = os.path.basename(dataset_name).replace('.pt', '')
-        df.to_csv(os.path.join(save_dir, f'{out_name}_baseline.csv'))
+        df.to_csv(os.path.join(save_dir, f'{out_name}{"_larger" if use_larger_part else ""}_baseline.csv'))
 
 
 if __name__ == "__main__":

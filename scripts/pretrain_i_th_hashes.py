@@ -16,19 +16,24 @@ from scripts.utils import mkdir_if_not_exists
 @click.command()
 @click.argument('hashes_dir')
 @click.argument('chunk_no')
+@click.option('--hash_csv', default=None, help='Path to csv file with a column that contains nasbench hashes for'
+                                               ' training.')
 @click.option('--prefix', default='hashes_')
 @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
 @click.option('--config_path', default='../configs/pretrain_config.json')
 @click.option('--root', default='../data/cifar/')
 @click.option('--seed', default=1)
 @click.option('--device', default='cuda')
-def main(hashes_dir, chunk_no, prefix, nasbench_path, config_path, root, seed, device):
+def main(hashes_dir, chunk_no, hash_csv, prefix, nasbench_path, config_path, root, seed, device):
     device = torch.device(device)
 
     # load hashes
+    if hash_csv is not None:
+        chunk_path = os.path.join(hashes_dir, f"{prefix}{chunk_no}.csv")
+        df = pd.read_csv(chunk_path)
+    else:
+        df = pd.read_csv(hash_csv)
 
-    chunk_path = os.path.join(hashes_dir, f"{prefix}{chunk_no}.csv")
-    df = pd.read_csv(chunk_path)
     hash_list = df['hashes'].to_list()
 
     out_dir = os.path.join(hashes_dir, f"out_{chunk_no}/")

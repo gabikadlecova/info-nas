@@ -15,7 +15,7 @@ jupyter:
 ```{python}
 import torch
 
-torch.cuda.random.get_rng_state()
+#torch.cuda.random.get_rng_state()
 #torch.random.get_rng_state()
 ```
 
@@ -23,7 +23,8 @@ torch.cuda.random.get_rng_state()
 # %autosave 0
 import os
 
-runs_dir = '/home/gabi/diplomka/code/info-nas/data/vae_checkpoints/2022-19-01_19-00-25/reinforce-runs'
+data_dir = '/home/gabi/diplomka/code/info-nas/data/paper_final_results'
+os.listdir(data_dir)
 ```
 
 ```{python}
@@ -33,186 +34,143 @@ def process_one_run(file):
         
     res_df = pd.DataFrame(res)
     res_df['name'] = os.path.basename(file).replace('.json', '')
+    basef = os.path.basename(file)
+    basef = basef.replace('run_', '')
+    
+    num = ''
+    for i in basef:
+        try:
+            int(i)
+        except:
+            break
+        num += i
+    res_df['seed'] = int(num)
     
     return res_df
 ```
 
 ```{python}
-import json
+seed = 3
+
+runs = {
+    'Accuracy 2': ('accuracy', 'orig'),
+    'Accuracy 1': ('accuracy', 'dense'),
+    'IO Model 2': ('info-nas', 'orig'),
+    'IO Model 1': ('info-nas', 'dense'),
+    'arch2vec': ('info-nas', 'ref'),
+    'arch2vec original': ('arch2vec_orig', 'original')
+}
+```
+
+```{python}
 import glob
+import json
 import pandas as pd
 
-info_9_runs = glob.glob(os.path.join(runs_dir, 'run_*_infonas*.json'))
-info_9_dfs = [process_one_run(g) for g in info_9_runs]
-info_9_dfs = pd.concat(info_9_dfs, axis=0, ignore_index=True)
-info_9_dfs['runtime_shifted'] = info_9_dfs['runtime'] + 138070 * 10 / 12
-info_9_dfs
+train_time_sum = 138070.05435689294
+
+def get_runs(name, pathnames, nb_time=None):
+    seed_it = seed if name != 'arch2vec original' else 1
+    runs_dir = os.path.join(data_dir, f"{pathnames[0]}_seeds", f"seed_{seed_it}", "reinforce-runs")
+    runs_paths = glob.glob(os.path.join(runs_dir, f'run_*{pathnames[1]}*.json'))
+    print(runs_dir)
+    run_dfs = [process_one_run(f) for f in runs_paths]
+    
+    run_dfs = pd.concat(run_dfs, axis=0, ignore_index=True)
+    run_dfs['algo'] = name
+    run_dfs['runtime_shifted'] = run_dfs['runtime']
+    if nb_time is not None:
+        run_dfs['runtime_shifted'] += nb_time
+    return run_dfs
+    
+res_dfs = []
+for n, p in runs.items():
+    res_dfs.append(get_runs(n, p, nb_time=train_time_sum if 'arch2vec' not in n else None))
 ```
 
 ```{python}
-arch_runs_dir = '/home/gabi/diplomka/diplomka_results/with_ref_5/2021-20-07_23-26-03/reinforce-runs/'
-arch_9_runs = glob.glob(os.path.join(arch_runs_dir, 'run_*_features_model_ref_epoch-9.json'))
-arch_9_dfs = [process_one_run(g) for g in arch_9_runs]
-arch_9_dfs = arch_9_dfs[:40]
-arch_9_dfs = pd.concat(arch_9_dfs, axis=0, ignore_index=True)
-arch_9_dfs
+plot_dfs = pd.concat(res_dfs, axis=0, ignore_index=True)
+plot_dfs
 ```
 
 ```{python}
-rounded_run = info_9_dfs['runtime'].round(decimals=-3)
-rounded_run[rounded_run == 2000]
+plot_dfs = plot_dfs.sort_values('algo')
 ```
 
 ```{python}
 import matplotlib.pyplot as plt
 import seaborn as sns
-# %matplotlib notebook
+sns.set(font_scale=1.2)
 
-cutoff=False
+save_dir = '/home/gabi/Dropbox/automl-conf/LatexTemplate/img'
 
-sns.set()
+plot_dfs['rounded_runtime'] = plot_dfs['runtime'].round(decimals=-4)
+plot_dfs['rounded_runtime_shifted'] = plot_dfs['runtime_shifted'].round(decimals=-4)
 
-info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
-arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
-
-plt.figure()
-sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_validation',
-#             label='info-NAS, 10 epochs')
-             label='our model, 10 epochs')
-sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_validation',
-             label='arch2vec, 10 epochs')
-
-sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_validation',
-#             label='info-NAS, 30 epochs')
-             label='our model, 10 epochs')
-sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_validation',
-             label='arch2vec, 30 epochs')
-
+plt.figure(figsize=(8,6))
+sns.lineplot(data=plot_dfs, x='rounded_runtime', y='regret_test', hue='algo')
 plt.xscale('log')
 plt.yscale('log')
-if cutoff:
-    plt.xlim(left=5e5, right=1.5e6)
-else:
-    plt.xlim(right=1.5e6)
-
-save_path = '/home/gabi/diplomka/neurips/paper/diplomka_to_neurips/img/'
-    
-plt.xlabel('Runtime')
-plt.ylabel('Validation regret')
-plt.title(f"Comparison of 500 REINFORCE runs - validation{' (detail)' if cutoff else ''}")
-plt.tight_layout()
-plt.savefig(os.path.join(save_path, f'valid_reinf{"_cutoff" if cutoff else ""}.png'))
-plt.show()
-```
-
-```{python}
-import matplotlib.pyplot as plt
-import seaborn as sns
-# %matplotlib notebook
-
-cutoff=False
-
-sns.set()
-
-info_29_dfs['rounded_runtime'] = info_29_dfs['runtime'].round(decimals=-4)
-arch_29_dfs['rounded_runtime'] = arch_29_dfs['runtime'].round(decimals=-4)
-
-plt.figure()
-sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test',
-             label='our model, 10 epochs')
-sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test',
-             label='arch2vec, 10 epochs')
-
-sns.lineplot(data=info_29_dfs, x='rounded_runtime', y='regret_test',
-             label='our model, 30 epochs')
-sns.lineplot(data=arch_29_dfs, x='rounded_runtime', y='regret_test',
-             label='arch2vec, 30 epochs')
-
-plt.xscale('log')
-plt.yscale('log')
-if cutoff:
-    plt.xlim(left=5e5, right=1.5e6)
-else:
-    plt.xlim(right=1.5e6)
-    
-plt.xlabel('Runtime')
+plt.title('REINFORCE run without shifted time')
+plt.xlabel('Estimated runtime in seconds')
 plt.ylabel('Test regret')
-plt.title(f"Comparison of 500 REINFORCE runs - test{' (detail)' if cutoff else ''}")
-plt.tight_layout()
-plt.savefig(os.path.join(save_path, f'test_reinf{"_cutoff" if cutoff else ""}.png'))
+plt.savefig(f"{save_dir}/reinf.png")
+plt.show()
+
+plt.figure(figsize=(8,6))
+sns.lineplot(data=plot_dfs, x='rounded_runtime_shifted', y='regret_test', hue='algo')
+plt.xscale('log')
+plt.yscale('log')
+plt.title('REINFORCE run with time shifted by network training time')
+plt.xlabel('Estimated runtime in seconds')
+plt.ylabel('Test regret')
+plt.savefig(f"{save_dir}/reinf_shifted.png")
 plt.show()
 ```
 
 ```{python}
+plot_dfs[['algo', 'regret_test']].groupby('algo').min()
+```
+
+```{python}
 
 ```
 
 ```{python}
-info_29_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_orig_epoch-29.json'))
-info_29_dfs = [process_one_run(g) for g in info_29_runs]
-info_29_dfs = pd.concat(info_29_dfs, axis=0)
-info_29_dfs
-```
+import matplotlib as mpl
+from matplotlib.lines import Line2D
 
-```{python}
-arch_29_runs = glob.glob(os.path.join(runs_dir, 'run_*_features_model_ref_epoch-29.json'))
-arch_29_dfs = [process_one_run(g) for g in arch_29_runs]
-arch_29_dfs = pd.concat(arch_29_dfs, axis=0)
-arch_29_dfs
-```
 
-```{python}
-import matplotlib.pyplot as plt
-import seaborn as sns
-# %matplotlib inline
+def fix_hist_step_vertical_line_at_end(ax):
+    axpolygons = [poly for poly in ax.get_children() if isinstance(poly, mpl.patches.Polygon)]
+    for poly in axpolygons:
+        poly.set_xy(poly.get_xy()[:-1])
 
-info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
-info_9_dfs['rounded_runtime_shifted'] = info_9_dfs['runtime_shifted'].round(decimals=-4)
-arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
+fig = plt.figure(figsize=(10,7))
+ax = fig.add_subplot(1, 1, 1)
+    
+cmap = plt.get_cmap("tab10")
 
-plt.figure()
-sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test', label='info')
-sns.lineplot(data=info_9_dfs, x='rounded_runtime_shifted', y='regret_test', label='info shifted')
-sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test', label='arch')
+for i, a in enumerate(plot_dfs['algo'].unique()):
+    pdfs = plot_dfs[(plot_dfs['algo'] == a) & \
+                    (plot_dfs['rounded_runtime_shifted'] == 1e6)]['regret_test'].to_list()
+    print(len(pdfs))
 
-plt.xscale('log')
-plt.yscale('log')
-plt.show()
-```
+    plt.hist(pdfs, bins=10, range=[8e-4, 1.2e-2], density=True,
+             cumulative=True, histtype='step', linestyle='--', color=cmap(i), lw=2,
+             label=a)
 
-```{python}
-import matplotlib.pyplot as plt
-import seaborn as sns
-# %matplotlib inline
+fix_hist_step_vertical_line_at_end(ax)
 
-info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
-info_9_dfs['rounded_runtime_shifted'] = info_9_dfs['runtime_shifted'].round(decimals=-4)
-arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
 
-plt.figure()
-sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_validation', label='info')
-sns.lineplot(data=info_9_dfs, x='rounded_runtime_shifted', y='regret_validation', label='info shifted')
-sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_validation', label='arch')
+ax.set_xscale('log')
+ax.set_xlabel('final test regret', fontsize=12)
+ax.set_ylabel('CDF', fontsize=12)
+handles, labels = ax.get_legend_handles_labels()
+new_handles = [Line2D([], [], c=h.get_edgecolor()) for h in handles]
+ax.legend(prop={"size":8}, handles=new_handles, labels=labels, loc='upper left')
 
-plt.xscale('log')
-plt.yscale('log')
-plt.show()
-```
 
-```{python}
-import matplotlib.pyplot as plt
-import seaborn as sns
-# %matplotlib notebook
-
-info_9_dfs['rounded_runtime'] = info_9_dfs['runtime'].round(decimals=-4)
-arch_9_dfs['rounded_runtime'] = arch_9_dfs['runtime'].round(decimals=-4)
-
-plt.figure()
-sns.lineplot(data=info_9_dfs, x='rounded_runtime', y='regret_test')
-sns.lineplot(data=arch_9_dfs, x='rounded_runtime', y='regret_test')
-
-plt.xscale('log')
-plt.yscale('log')
 plt.show()
 ```
 

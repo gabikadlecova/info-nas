@@ -1,0 +1,268 @@
+---
+jupyter:
+  jupytext:
+    text_representation:
+      extension: .Rmd
+      format_name: rmarkdown
+      format_version: '1.2'
+      jupytext_version: 1.13.0
+  kernelspec:
+    display_name: pyt_conda
+    language: python
+    name: pyt_conda
+---
+
+```{python}
+import os
+
+data_dir = '/home/gabi/diplomka/code/info-nas/data/paper_final_results'
+os.listdir(data_dir)
+```
+
+```{python}
+import pandas as pd
+
+res_losses = []
+res_metrics = []
+res_names = {
+    'accuracy': 'Accuracy model',
+    'info-nas': 'IO model'
+}
+
+for seed in range(1, 4):
+    for infonas_type in ['accuracy', 'info-nas']:
+        curr_path = os.path.join(data_dir, f"{infonas_type}_seeds", f"seed_{seed}")
+        losses = pd.read_csv(os.path.join(curr_path, 'loss.csv')).rename(columns={'Unnamed: 0': 'epoch'})
+        metrics = pd.read_csv(os.path.join(curr_path, 'metrics.csv')).rename(columns={'Unnamed: 0': 'epoch'})
+        
+        losses['algo'] = res_names[infonas_type]
+        losses['seed'] = seed
+        
+        metrics['algo'] = res_names[infonas_type]
+        metrics['seed'] = seed
+        
+        res_losses.append(losses)
+        res_metrics.append(metrics)
+        
+res_losses = pd.concat(res_losses, ignore_index=True)
+res_metrics = pd.concat(res_metrics, ignore_index=True)
+```
+
+```{python}
+res_losses.columns
+```
+
+```{python}
+res_metrics.columns
+```
+
+```{python}
+info_losses = res_losses[res_losses['algo'] == res_names['info-nas']]
+acc_losses = res_losses[res_losses['algo'] == res_names['accuracy']]
+
+info_metrics = res_metrics[res_metrics['algo'] == res_names['info-nas']]
+acc_metrics = res_metrics[res_metrics['algo'] == res_names['accuracy']]
+```
+
+```{python}
+print(os.listdir(f"{data_dir}/baselines"))
+
+def get_base(name, ci=False, n=None):
+    r = pd.read_csv(f"{data_dir}/baselines/{name}")
+    if ci:
+        print(r)
+        return round(1.96 / np.sqrt(n) * r.iloc[0]['std'], 4)
+    return r.iloc[0]['mean']
+
+import pandas as pd
+
+n_train = 608000 / 32
+n_val = 77000 / 32
+n_valim = 122000 / 32
+
+train_base = get_base('train_long_baseline.csv')
+val_net_base = get_base('valid_long_baseline.csv')
+val_img_base = get_base('test_train_long_baseline.csv')
+
+train_base_ci = get_base('train_long_baseline.csv', ci=True, n=n_train)
+val_net_base_ci = get_base('valid_long_baseline.csv', ci=True, n=n_val)
+val_img_base_ci = get_base('test_train_long_baseline.csv', ci=True, n=n_valim)
+```
+
+```{python}
+round(train_base_ci, 3)
+```
+
+```{python}
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.set()
+```
+
+```{python}
+save_dir = '/home/gabi/Dropbox/automl-conf/LatexTemplate/img'
+
+sns.lineplot(data=info_losses, x='epoch', y='labeled_labeled',
+             label=f'Train (baseline {round(train_base,3)}$\pm$ {train_base_ci})')
+sns.lineplot(data=info_metrics, x='epoch', y='labeled_valid_unseen_networks-val_loss',
+             label=f'Val unseen nets (baseline {round(val_net_base,3)} $\pm$ {val_net_base_ci})')
+sns.lineplot(data=info_metrics, x='epoch', y='labeled_valid_unseen_images-val_loss',
+             label=f'Val unseen img (baseline {round(val_img_base,3)}$\pm$ {val_img_base_ci})')
+plt.legend()
+plt.ylim(0.017, 0.032)
+plt.title('Train and validation losses - IO model')
+plt.ylabel('MSE loss')
+plt.xlabel('Epoch')
+plt.savefig(f"{save_dir}/loss.png")
+plt.show()
+```
+
+```{python}
+sns.lineplot(data=acc_losses, x='epoch', y='labeled_labeled', label='Train')
+sns.lineplot(data=acc_metrics, x='epoch', y='labeled_valid_unseen_networks-val_loss', label='Val unseen nets')
+plt.title('Train and validation losses - Accuracy model')
+plt.ylabel('MSE loss')
+plt.xlabel('Epoch')
+plt.savefig(f"{save_dir}/lossacc.png")
+plt.show()
+```
+
+```{python}
+sns.lineplot(data=acc_metrics, x='epoch', y='unlabeled_uniqueness')
+sns.lineplot(data=info_metrics, x='epoch', y='unlabeled_uniqueness')
+sns.lineplot(data=info_metrics, x='epoch', y='reference_uniqueness')
+plt.show()
+```
+
+```{python}
+sns.lineplot(data=acc_metrics, x='epoch', y='unlabeled_validity', label='Accuracy model')
+sns.lineplot(data=info_metrics, x='epoch', y='unlabeled_validity', label='IO model')
+sns.lineplot(data=info_metrics, x='epoch', y='reference_validity', label='arch2vec')
+plt.legend()
+plt.show()
+```
+
+```{python}
+def plot_compare_metric(what):
+    sns.lineplot(data=acc_metrics, x='epoch', y=f'unlabeled_{what}', label='Accuracy model')
+    sns.lineplot(data=info_metrics, x='epoch', y=f'unlabeled_{what}', label='IO model')
+    sns.lineplot(data=info_metrics, x='epoch', y=f'reference_{what}', label='arch2vec')
+    plt.legend()
+```
+
+```{python}
+plot_compare_metric('acc_ops_val')
+plt.show()
+```
+
+```{python}
+plot_compare_metric('acc_adj_val')
+```
+
+```{python}
+plot_compare_metric('acc_ops_val')
+```
+
+```{python}
+# z tohodle a z recon acc tabulku
+acc_metrics[acc_metrics['epoch'] == 10]['unlabeled_validity'].describe()
+```
+
+```{python}
+acc_metrics[acc_metrics['epoch'] == 10][['running_time', 'seed']]
+```
+
+```{python}
+info_metrics[info_metrics['epoch'] == 10][['running_time', 'seed']]
+```
+
+```{python}
+os.listdir(data_dir)
+
+test_img_base = get_base('test_train_long_larger_baseline.csv')
+print(round(test_img_base, 4))
+test_val_base = get_base('test_valid_long_baseline.csv')
+print(round(test_val_base, 4))
+
+test_img_base_ci = get_base('test_train_long_larger_baseline.csv', ci=True, n=1094000)
+test_val_base_ci = get_base('test_valid_long_baseline.csv', ci=True, n=154000)
+print(test_img_base_ci, test_val_base_ci)
+
+res_test = {}
+
+for path in ['test_train_long.pt_larger.csv', 'test_valid_long.pt_larger.csv']:
+    res = []
+    for i in range(1,4):
+        val = pd.read_csv(f"{data_dir}/info-nas_seeds/seed_{i}/{path}")
+        val = val['MSE'].iloc[0]
+        res.append(val)
+    res_test[path] = round(np.mean(res), 4)
+    res_test[f"{path}_std"] = round(np.std(res), 4)
+res_test
+```
+
+```{python}
+
+pd.read_csv(f"{data_dir}/info-nas_seeds/seed_3/test_train_long.pt_larger.csv")
+```
+
+```{python}
+
+pd.read_csv(f"{data_dir}/info-nas_seeds/seed_2/test_train_long.pt_larger.csv")
+```
+
+```{python}
+info_epoch_10 = info_metrics[info_metrics['epoch'] == 10]
+acc_epoch_10 = acc_metrics[acc_metrics['epoch'] == 10]
+acc_epoch_10
+```
+
+```{python}
+import numpy as np
+
+def get_all_three(what, label, rnd=3):
+    info = info_epoch_10[f'unlabeled_{what}']
+    ref = info_epoch_10[f'reference_{what}']
+    acc = acc_epoch_10[f'unlabeled_{what}']
+    
+    res = []
+    for val, name in zip([ref, acc, info], ['arch2vec', 'Accuracy Model', 'IO Model']):
+        res.append({
+            'name': name, f'{label} mean': round(np.mean(val), rnd),
+            f'{label} std': round(np.std(val), rnd)
+        })
+    return pd.DataFrame(res)
+```
+
+```{python}
+get_all_three('validity', 'validity')
+```
+
+```{python}
+get_all_three('uniqueness', 'uniqueness')
+```
+
+```{python}
+info_epoch_10.columns
+```
+
+```{python}
+get_all_three('acc_adj_val', 'Adj Recon Acc')
+```
+
+```{python}
+get_all_three('acc_ops_val', 'Ops Recon Acc')
+```
+
+```{python}
+acc_epoch_10['running_time'].mean()
+```
+
+```{python}
+info_epoch_10['running_time'].mean()
+```
+
+```{python}
+
+```

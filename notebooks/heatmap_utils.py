@@ -7,7 +7,7 @@ from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
 from info_nas.datasets.io.semi_dataset import labeled_network_dataset
 
 
-def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
+def get_pred_and_orig(gen, model=None, print_freq=1000, device=None, top_k=None, batch_stop=None):
     orig = []
     pred = []
     info = {k: [] for k in ['label', 'hash', 'ref_id']}
@@ -20,6 +20,9 @@ def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
     for i, batch in enumerate(gen):
         if i % print_freq == 0:
             print(f"Batch {i}")
+            
+        if batch_stop is not None and i >= batch_stop:
+            break
 
         for w in ['label', 'hash', 'ref_id']:
             info[w].extend(batch[w])
@@ -28,8 +31,11 @@ def get_pred_and_orig(gen, model=None, print_freq=1000, device=None):
 
         if model is not None:
             res = model(b[1].to(device), b[0].to(device), b[2].to(device))
+            res = res if top_k is None else res[:, :top_k]
             pred.append(res[-1].detach().cpu().numpy())
-        orig.append(b[3].numpy())
+        o = b[3].numpy()
+        o = o if top_k is None else o[:, :top_k]
+        orig.append(o)
         weights.append(np.concatenate([batch['weights'], batch['bias'][:, :, np.newaxis]], axis=-1))
         labels.append(batch['label'].numpy())
 
