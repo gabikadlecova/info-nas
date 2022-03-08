@@ -28,15 +28,16 @@ def main(hashes_dir, chunk_no, hash_csv, prefix, nasbench_path, config_path, roo
     device = torch.device(device)
 
     # load hashes
-    if hash_csv is not None:
+    if hash_csv is None:
         chunk_path = os.path.join(hashes_dir, f"{prefix}{chunk_no}.csv")
         df = pd.read_csv(chunk_path)
+        out_dir = os.path.join(hashes_dir, f"out_{chunk_no}/")
     else:
         df = pd.read_csv(hash_csv)
+        dirname, hashname = os.path.split(hash_csv)
+        out_dir = os.path.join(dirname, f"out_{os.path.splitext(hashname)}/")
 
     hash_list = df['hashes'].to_list()
-
-    out_dir = os.path.join(hashes_dir, f"out_{chunk_no}/")
     mkdir_if_not_exists(out_dir)
 
     # pretrain
