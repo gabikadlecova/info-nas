@@ -79,6 +79,6 @@ performance predictor on the features, e.g. a random forest:
 
 ```
 cd ../info-nas/scripts/
-python run_gaussian_process.py features_model_orig_epoch-9.pt \
+python run_performance_prediction.py features_model_orig_epoch-9.pt \
   --dir_name $CHCKPT_DIR --n_hashes 250 --regr_name rf --seed 1
 ```
