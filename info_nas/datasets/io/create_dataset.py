@@ -67,7 +67,7 @@ def dataset_from_pretrained(net_dir: Union[str, List[str]], nasbench, dataset, s
 
 
 def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, device=None, print_frequency=20,
-                      use_test_data=False, test_subset_size=20):
+                      use_test_data=False, test_subset_size=20, seed=1):
     """
     Create the IO dataset with the following format (N is the size of the dataset, M is the number of trained
     networks, I is the number of images):
@@ -104,7 +104,8 @@ def create_io_dataset(networks, dataset, nth_input=0, nth_output=-2, loss=None, 
     # test dataset
     if use_test_data:
         validation_size = None
-        test_inds = np.random.choice(np.arange(len(test_loader)), size=test_subset_size, replace=False)
+        rng = np.random.RandomState(seed) if seed is not None else np.random
+        test_inds = rng.choice(np.arange(len(test_loader)), size=test_subset_size, replace=False)
 
         loaded_dataset = [b for i, b in enumerate(test_loader) if i in test_inds]
     else:
