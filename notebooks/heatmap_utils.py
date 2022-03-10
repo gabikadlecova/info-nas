@@ -51,11 +51,11 @@ def get_pred_and_orig(gen, model=None, print_freq=1000, device=None, top_k=None,
 
 
 
-def get_labeled_data(data_pt, nasbench, nb_dataset, input_dataset, top_k=None):
+def get_labeled_data(data_pt, nasbench, nb_dataset, input_dataset, top_k=None, key="train"):
     transforms = [IncludeBias(), MultByWeights(include_bias=True), SortByWeights(return_top_n=top_k)]
     transforms = torchvision.transforms.Compose(transforms)
 
-    data, _ = prepare_labeled_dataset(data_pt, nasbench, device=torch.device('cpu'),
+    data, _ = prepare_labeled_dataset(data_pt, nasbench, device=torch.device('cpu'), key=key,
                                       nb_dataset=nb_dataset, dataset=input_dataset, remove_labeled=False)
 
     labeled = labeled_network_dataset(data, transforms=transforms, return_ref_id=True)
