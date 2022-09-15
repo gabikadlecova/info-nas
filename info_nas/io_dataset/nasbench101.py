@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import torch
 
@@ -22,6 +24,7 @@ class NasbenchIOExtractor(BaseIOExtractor):
 
     def get_io_data(self, net, data, device=None):
         input_idx = []
+        labels = []
         batch_size = None
 
         # register hook to get output data
@@ -34,16 +37,17 @@ class NasbenchIOExtractor(BaseIOExtractor):
 
         # fill the hook object
         with torch.no_grad():
-            for batch_idx, batch in enumerate(data):
-                inputs = batch[0].to(device)
+            for batch_idx, (inputs, targets) in enumerate(data):
+                inputs = inputs.to(device)
                 batch_size = batch_size if batch_size is None else len(inputs)
-                net(inputs)
 
-                input_idx.append(np.arange(torch.arange(len(inputs)) + batch_idx * batch_size))
+                net(inputs)
+                input_idx.append(torch.arange(len(inputs) + batch_idx * batch_size))
+                labels.append(targets)
 
         reg_h.remove()
 
-        res = {'outputs': torch.cat(hook.inputs), 'inputs': torch.cat(input_idx)}
+        res = {'outputs': torch.cat(hook.inputs), 'inputs': torch.cat(input_idx), 'labels': torch.cat(labels)}
         if self.save_weights:
             res['weights'] = out_layer.weight
             res['biases'] = out_layer.biases
