@@ -47,7 +47,7 @@ class NasbenchIOExtractor(BaseIOExtractor):
 
         reg_h.remove()
 
-        res = {'outputs': torch.cat(hook.inputs), 'inputs': torch.cat(input_idx), 'labels': torch.cat(labels)}
+        res = {'outputs': hook.inputs, 'inputs': input_idx, 'labels': labels}
         if self.save_weights:
             res['weights'] = out_layer.weight
             res['biases'] = out_layer.biases
