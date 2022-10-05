@@ -7,15 +7,13 @@ import pandas as pd
 import torch
 from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
 from arch2vec.models.configs import configs
-from arch2vec.utils import load_json, preprocessing
 from nasbench import api
 
 from info_nas.config import load_json_cfg
-from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
-from info_nas.eval import eval_labeled_validation
+from info_nas.eval_old import eval_labeled_validation
 
 from info_nas.models.accuracy_model import AccuracyModel
-from info_nas.models.losses import losses_dict
+from info_nas.metrics.losses import losses_dict
 
 from info_nas.models.utils import load_extended_vae
 from scripts.utils import experiment_transforms, get_eval_set

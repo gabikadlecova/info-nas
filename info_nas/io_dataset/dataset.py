@@ -42,12 +42,12 @@ class SemiIODataset:
 
     def _next_labeled(self):
         for data in self.io_loader:
-            yield data
+            yield data, True
 
     def _next_unlabeled(self):
         for _ in range(self.k):
             for data in self.unlabeled_loader:
-                yield data
+                yield data, False
 
 
 def create_io_data(search_space: BaseDataset, extractor: BaseIOExtractor, dataset, save_input_images: bool = True,

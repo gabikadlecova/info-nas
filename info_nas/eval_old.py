@@ -7,7 +7,7 @@ import torch
 from arch2vec.extensions.get_nasbench101_model import eval_validity_and_uniqueness, eval_validation_accuracy
 from arch2vec.utils import preprocessing
 
-from info_nas.models.losses import metrics_dict
+from info_nas.metrics.losses import metrics_dict
 from info_nas.models.utils import get_hash_accuracy
 
 

@@ -8,10 +8,10 @@ from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
 from arch2vec.utils import preprocessing, save_checkpoint_vae
 
 from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
-from info_nas.eval import init_stats_dict, mean_losses, checkpoint_metrics_losses, eval_epoch
+from info_nas.eval_old import init_stats_dict, mean_losses, checkpoint_metrics_losses, eval_epoch
 from info_nas.models.layers import LatentNodesFlatten, get_dense_list
 from info_nas.models.utils import get_optimizer, save_extended_vae, get_hash_accuracy
-from info_nas.trainer import _init_config_and_seeds, _save_arch2vec_model, _eval_batch
+from info_nas.trainer_old import _init_config_and_seeds, _save_arch2vec_model, _eval_batch
 
 
 class AccuracyModel(nn.Module):

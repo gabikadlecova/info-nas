@@ -28,11 +28,14 @@ class IOModel(nn.Module):
     def inputs_forward(self, z, inputs):
         return inputs
 
+    def get_vae(self):
+        return self.vae_model
+
     def forward(self, ops, args, inputs):
-        ops_recon, adj_recon, mu, logvar, z = self.vae_model.forward(ops, args)
+        vae_out, z = self.vae_model.forward(ops, args)
         outputs = self.inputs_forward(z, inputs)
 
-        return ops_recon, adj_recon, mu, logvar, z, outputs
+        return vae_out, outputs
 
 
 class ConcatConvModel(IOModel):

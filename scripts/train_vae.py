@@ -15,7 +15,7 @@ from info_nas.datasets.io.transforms import get_transforms, get_all_scales, Incl
 from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
 from nasbench import api
 
-from info_nas.trainer import train
+from info_nas.trainer_old import train
 
 
 # @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
