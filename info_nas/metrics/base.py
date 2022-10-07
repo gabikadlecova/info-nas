@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Dict, Callable
+from typing import Dict, Callable, List
 
 import numpy as np
 
@@ -19,6 +19,24 @@ class BaseMetric:
     @abstractmethod
     def epoch_end(self):
         pass
+
+
+class MetricList(BaseMetric):
+    def __init__(self, metric_list: List[BaseMetric], name=''):
+        super().__init__(name=name)
+        self.metric_list = metric_list
+
+    def epoch_start(self):
+        for m in self.metric_list:
+            m.epoch_start()
+
+    def next_batch(self, y_true, y_pred):
+        for m in self.metric_list:
+            m.next_batch(y_true, y_pred)
+
+    def epoch_end(self):
+        for m in self.metric_list:
+            m.epoch_end()
 
 
 class SimpleMetric(BaseMetric):

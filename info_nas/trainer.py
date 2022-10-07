@@ -4,36 +4,32 @@ from torch import nn
 from info_nas.models.io_model import IOModel
 
 
-class IOTrainer:
-    def __init__(self, device=None):
+class VAETrainer:
+    def __init__(self, model, optimizer, device=None, clip=5):
         self.metric_logger = None  # TODO wandb nebo něco
 
+        self.unlabeled_loss = None  # TODO pokud neni instance base metriky, zabalit
         self.unlabeled_metrics = []  # TODO
-        self.labeled_metrics = []
 
         self.preprocessor = None  # TODO arch2vec thing
 
-        self.optimizer = None  # TODO
+        self.model = model
+        self.optimizer = optimizer
 
         self.verbose = True  # add verbosity prints, ten statusbar s divnym nazvem (tq neco?)
         self.device = device
+        self.clip = clip
 
-    def train(self, io_model: IOModel, train_data, validation_data, n_epochs=1):
-        io_model = io_model.to(self.device)
-        vae_model = io_model.get_vae()
+    def train(self, model, train_data, validation_data, n_epochs=1):
+        model = model.to(self.device)
 
-        # TODO metrics.epoch_start()
-        for batch, is_labeled in train_data:
+        for batch in train_data:
             self.optimizer.zero_grad()
 
-            # místo toho train_on_batch. Od tyhle tridy odvodit ref trainera - ten bude jednou ignorovat labeled a
-            # podruhy ne
-            if is_labeled:
-                self._train_batch_labeled(io_model, batch)
-            else:
-                self._train_batch_unlabeled(vae_model, batch)
+            batch = self.process_batch(batch)
+            loss = self.train_on_batch(model, batch)
 
-            nn.utils.clip_grad_norm_(io_model.parameters(), 5)  # TODO hyperparam
+            nn.utils.clip_grad_norm_(model.parameters(), self.clip)
             self.optimizer.step()
 
             # TODO ref model train/eval
@@ -43,27 +39,45 @@ class IOTrainer:
 
             # TODO checkpointing
 
-    def _train_batch_labeled(self, io_model, batch):
-        adj, ops, inputs, outputs = self._process_batch(batch, labeled=True)
+    def train_on_batch(self, model, batch):
+        adj, ops = batch
+        pred = model(ops, adj.to(torch.long))
+
+    def process_batch(self, batch):
+        adj, ops = batch['adj'].to(self.device), batch['ops'].to(self.device)
+        adj, ops = self.preprocessor.preprocess(adj, ops)
+
+        return adj, ops
+
+
+class IOTrainer(VAETrainer):
+    def __init__(self, model, optimizer, device=None, clip=5):
+        super().__init__(model, optimizer, device=device, clip=clip)
+
+        self.labeled_loss = None  # TODO
+        self.labeled_metrics = []  # TODO as MetricList
+
+    def train_on_batch(self, model, batch):
+        batch, is_labeled = batch
+        if is_labeled:
+            return super().train_on_batch(model.vae_model(), batch)
+        else:
+            return self.train_on_batch_labeled(model, batch)
+
+    def train_on_batch_labeled(self, io_model, batch):
+        adj, ops, inputs, outputs = batch
         pred_vae, pred_io = io_model(ops, adj.to(torch.long), inputs)
 
         # TODO eval loss, eval metrics (both for un/labeled - _function)
         #     - save Z in metrics somehow
         # return loss
 
-    def _train_batch_unlabeled(self, model, batch):
-        adj, ops = self._process_batch(batch, labeled=False)
-        pred = model(ops, adj.to(torch.long))
+    def process_batch(self, batch):
+        batch, is_labeled = batch
 
-        # TODO eval unlabeled loss/metrics
-        pass
-
-    def _process_batch(self, batch, labeled=False):
-        adj, ops = batch['adj'].to(self.device), batch['ops'].to(self.device)
-        adj, ops = self.preprocessor.preprocess(adj, ops)
-
-        if not labeled:
-            return adj, ops
+        adj, ops = super().process_batch(batch)
+        if not is_labeled:
+            return (adj, ops), is_labeled
 
         inputs, outputs = batch['inputs'].to(self.device), batch['outputs'].to(self.device)
-        return adj, ops, inputs, outputs
+        return (adj, ops, inputs, outputs), is_labeled
