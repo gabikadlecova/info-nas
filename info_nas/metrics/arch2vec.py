@@ -3,24 +3,49 @@ import torch
 from nasbench import api
 from nasbench.lib import graph_util
 
-from info_nas.metrics.base import BaseMetric
+from info_nas.metrics.base import BaseMetric, OnlineMean
 from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
 
 
-# TODO accuracy, false positives etc
-
-
-class ReconstructionAccuracyMetric:
-    def __init__(self, prepro: Arch2vecPreprocessor):
+class ReconstructionAccuracyMetric(BaseMetric):
+    def __init__(self, prepro: Arch2vecPreprocessor, name='reconstruction_accuracy', adj_threshold=0.5, batched=True):
+        super().__init__(name=name)
         self.prepro = prepro
-        # TODO add all as mean metric, let this inherit from BaseMetric
+        self.metrics = {k: OnlineMean() for k in ['ops_accuracy', 'adj_recall', 'adj_false_pos', 'adj_accuracy']}
+        self.threshold = adj_threshold
+        self.batched = batched
 
-    def __call__(self, y_pred, y_true):
-        # TODO get_nb_model 152-158 sem/do tridy - v y_true je vystup z arch2vecu, v metrikach nutny prepreverse atd
-        # tj. dat z tohohle tridu, dat sem prepro, dat to callable a cpat to do ty meanmetric
-        ops_recon, adj_recon = y_pred
+    def epoch_start(self):
+        for v in self.metrics.values():
+            v.reset()
+
+    def next_batch(self, y_pred, y_true):
+        res = {}
+
+        ops_recon, adj_recon, _, _, _ = y_pred
         ops, adj = y_true
 
+        adj_recon, ops_recon = self.prepro.process_reverse(adj_recon, ops_recon)
+        adj, ops = self.prepro.process_reverse(adj, ops)
+
+        batch_size, adj_dim, _ = adj.shape
+
+        res['ops_accuracy'] = ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item()
+        res['adj_recall'] = adj_recon[adj.type(torch.bool)].sum().item() / adj.sum()
+
+        triangle_div = batch_size * adj_dim * (adj_dim - 1) / 2.0
+        res['adj_false_pos'] = adj_recon[(~adj.type(torch.bool)).triu(1)].sum().item() / (triangle_div - adj.sum())
+
+        adj_recon_thre = adj_recon > self.threshold
+        res['adj_accuracy'] = adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div
+
+        for k, v in res.items():
+            self.metrics[k].add(v, batch_size=batch_size if self.batched else 1)
+
+        return res
+
+    def epoch_end(self):
+        pass
 
 
 class LatentVectorMetric(BaseMetric):
@@ -42,7 +67,8 @@ class LatentVectorMetric(BaseMetric):
 
 # TODO cite that it's from arch2vec
 class ValidityUniquenessMetric(LatentVectorMetric):
-    def __init__(self, model, validity_func, prepro: Arch2vecPreprocessor, name='validity_uniqueness', n_latent_points=10000, device=None):
+    def __init__(self, model, validity_func, prepro: Arch2vecPreprocessor, name='validity_uniqueness',
+                 n_latent_points=10000, device=None):
         super().__init__(name=name)
         self.model = model
         self.prepro = prepro
@@ -52,7 +78,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
         self.validity_func = validity_func
 
     def epoch_end(self):
-        self.compute_validity_uniqueness()
+        return self.compute_validity_uniqueness()
 
     def compute_validity_uniqueness(self):
         z_vec = torch.cat(self.mu_list, dim=0)
