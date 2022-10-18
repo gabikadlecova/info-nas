@@ -9,22 +9,22 @@ class Arch2vecPreprocessor:
         self.parse_func = parse_nasbench101 if parse_func is None else parse_func
         self.convert_back_func = convert_to_nasbench101 if convert_back_func is None else convert_back_func
 
-    def parse_net(self, adj, ops):
-        return self.parse_func(adj, ops)
+    def parse_net(self, ops, adj):
+        return self.parse_func(ops, adj)
 
-    def convert_back(self, adj, ops):
-        return self.convert_back_func(adj, ops)
+    def convert_back(self, ops, adj):
+        return self.convert_back_func(ops, adj)
 
-    def preprocess(self, adj, ops):
+    def preprocess(self, ops, adj):
         adj = adj + adj.triu(1).transpose(-1, -2)
-        return adj, ops
+        return ops, adj
 
-    def process_reverse(self, adj, ops):
-        return adj.triu(1), ops
+    def process_reverse(self, ops, adj):
+        return ops, adj.triu(1)
 
 
 # TODO test jestli je to stejný jako původní pad
-def parse_nasbench101(adj, ops, nb_rows=7):
+def parse_nasbench101(ops, adj, nb_rows=7):
     if adj.shape != (nb_rows, nb_rows):
         adj = np.pad(adj, ((0, nb_rows - adj.shape[0]), (0, nb_rows - adj.shape[1])), 'constant', constant_values=0)
 
@@ -34,17 +34,17 @@ def parse_nasbench101(adj, ops, nb_rows=7):
         col = transform_dict[op]
         ops_array[row, col] = 1
 
-    return adj, ops_array
+    return ops_array, adj
 
 
-def convert_to_nasbench101(adj, ops):
+def convert_to_nasbench101(ops, adj):
     transform_dict = {0: 'input', 1: 'conv1x1-bn-relu', 2: 'conv3x3-bn-relu', 3: 'maxpool3x3', 4: 'output'}
     out_ops = []
     for idx in ops:
         out_ops.append(transform_dict[idx.item()])
 
     adj = (adj > 0.5).int().triu(1).numpy()
-    return adj, out_ops
+    return out_ops, adj
 
 
 class Arch2vecModel(nn.Module):
@@ -53,8 +53,9 @@ class Arch2vecModel(nn.Module):
         super().__init__()
 
         self.model = Model(input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim, num_hops=num_layers,
-                           num_mlp_layers=num_mlps, dropout=dropout, return_z=True, activation_adj=activation_adj,
-                           activation_ops=activation_ops, adj_hidden_dim=adj_hidden_dim, ops_hidden_dim=ops_hidden_dim)
+                           num_mlp_layers=num_mlps, dropout=dropout, activation_adj=activation_adj,
+                           activation_ops=activation_ops, adj_hidden_dim=adj_hidden_dim, ops_hidden_dim=ops_hidden_dim,
+                           return_z=True)
 
     def forward(self, ops, adj):
         out = self.model.forward(ops, adj)

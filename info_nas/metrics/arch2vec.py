@@ -1,10 +1,31 @@
 import numpy as np
 import torch
+from torch import nn
 from nasbench import api
 from nasbench.lib import graph_util
 
 from info_nas.metrics.base import BaseMetric, OnlineMean
 from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
+
+
+class VAELoss:
+    def __init__(self, adj_loss=None, ops_loss=None, w_ops=1.0, w_adj=1.0):
+        self.adj_loss = nn.BCELoss() if adj_loss is None else adj_loss
+        self.ops_loss = nn.BCELoss() if ops_loss is None else ops_loss
+        self.w_ops = w_ops
+        self.w_adj = w_adj
+
+    def __call__(self, y_pred, y_true):
+        ops, adj = y_true
+        ops_recon, adj_recon, mu, logvar = y_pred
+
+        loss_ops = self.ops_loss(ops_recon, ops)
+        loss_adj = self.adj_loss(adj_recon, adj)
+        loss = self.w_ops * loss_ops + self.w_adj * loss_adj
+
+        kl_div = -0.5 / (ops.shape[0] * ops.shape[1]) * torch.mean(
+            torch.sum(1 + 2 * logvar - mu.pow(2) - logvar.exp().pow(2), 2))
+        return loss + kl_div
 
 
 class ReconstructionAccuracyMetric(BaseMetric):
@@ -15,18 +36,20 @@ class ReconstructionAccuracyMetric(BaseMetric):
         self.threshold = adj_threshold
         self.batched = batched
 
-    def epoch_start(self):
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
+
         for v in self.metrics.values():
             v.reset()
 
-    def next_batch(self, y_pred, y_true):
+    def next_batch(self, y_true, y_pred):
         res = {}
 
         ops_recon, adj_recon, _, _, _ = y_pred
         ops, adj = y_true
 
-        adj_recon, ops_recon = self.prepro.process_reverse(adj_recon, ops_recon)
-        adj, ops = self.prepro.process_reverse(adj, ops)
+        ops_recon, adj_recon = self.prepro.process_reverse(ops_recon, adj_recon)
+        ops, adj = self.prepro.process_reverse(ops, adj)
 
         batch_size, adj_dim, _ = adj.shape
 
@@ -45,7 +68,7 @@ class ReconstructionAccuracyMetric(BaseMetric):
         return res
 
     def epoch_end(self):
-        pass
+        super().epoch_end()
 
 
 class LatentVectorMetric(BaseMetric):
@@ -53,7 +76,8 @@ class LatentVectorMetric(BaseMetric):
         super().__init__(name=name)
         self.mu_list = []
 
-    def epoch_start(self):
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
         self.mu_list = []
 
     def next_batch(self, y_true, y_pred):
@@ -62,7 +86,7 @@ class LatentVectorMetric(BaseMetric):
         return mu
 
     def epoch_end(self):
-        pass
+        super().epoch_end()
 
 
 # TODO cite that it's from arch2vec
@@ -78,6 +102,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
         self.validity_func = validity_func
 
     def epoch_end(self):
+        super().epoch_end()
         return self.compute_validity_uniqueness()
 
     def compute_validity_uniqueness(self):
@@ -98,7 +123,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
             ops = ops.squeeze(0).detach().cpu()
             adj = adj.squeeze(0).detach().cpu()
             max_idx = torch.argmax(ops, dim=-1)
-            adj_decode, ops_decode = self.prepro.convert_back(adj, max_idx)
+            ops_decode, adj_decode = self.prepro.convert_back(max_idx, adj)
 
             is_valid = self.validity_func(ops_decode, adj_decode)
 
@@ -121,7 +146,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
         return validity, uniqueness  # TODO save it, return as a dict
 
 
-class ValidityUniquenessNasbench101:
+class ValidityNasbench101:
     def __init___(self, nasbench):
         self.nasbench = nasbench
 

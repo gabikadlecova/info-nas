@@ -7,18 +7,17 @@ import numpy as np
 class BaseMetric:
     def __init__(self, name):
         self.name = name
+        self.message = ''
 
-    @abstractmethod
-    def epoch_start(self):
-        pass
+    def epoch_start(self, message=''):
+        self.message = message
 
     @abstractmethod
     def next_batch(self, y_true, y_pred):
         pass
 
-    @abstractmethod
     def epoch_end(self):
-        pass
+        self.message = ''
 
 
 class MetricList(BaseMetric):
@@ -26,17 +25,20 @@ class MetricList(BaseMetric):
         super().__init__(name=name)
         self.metric_list = metric_list
 
-    def epoch_start(self):
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
+
         for m in self.metric_list:
             m.epoch_start()
 
     def next_batch(self, y_true, y_pred):
-        for m in self.metric_list:
-            m.next_batch(y_true, y_pred)
+        return [m.next_batch(y_true, y_pred) for m in self.metric_list]
 
     def epoch_end(self):
         for m in self.metric_list:
             m.epoch_end()
+
+        super().epoch_end()
 
 
 class SimpleMetric(BaseMetric):
@@ -45,15 +47,15 @@ class SimpleMetric(BaseMetric):
         super().__init__(name)
         self.pred_first = pred_first
 
-    def epoch_start(self):
-        pass
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
 
     def next_batch(self, y_true, y_pred):
         res = self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
         return res
 
     def epoch_end(self):
-        pass
+        super().epoch_end()
 
 
 # TODO logging (e.g. wandb)
@@ -63,7 +65,8 @@ class MeanMetric(SimpleMetric):
         self.mean_loss = OnlineMean()
         self.batched = batched
 
-    def epoch_start(self):
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
         self.mean_loss.reset()
 
     def next_batch(self, y_true, y_pred):
@@ -74,7 +77,7 @@ class MeanMetric(SimpleMetric):
         return res
 
     def epoch_end(self):
-        pass
+        super().epoch_end()
 
 
 class StatsMetric(SimpleMetric):
@@ -97,7 +100,8 @@ class StatsMetric(SimpleMetric):
 
         return self.metric_data
 
-    def epoch_start(self):
+    def epoch_start(self, message=''):
+        super().epoch_start(message=message)
         self.reset_data()
 
     def next_batch(self, y_true, y_pred):
@@ -106,6 +110,7 @@ class StatsMetric(SimpleMetric):
         return res
 
     def epoch_end(self):
+        super().epoch_end()
         return self.compute_metrics()
 
 

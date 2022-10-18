@@ -14,8 +14,8 @@ class SemiIODataset:
 
         io_net_data, unlabeled_net_data = split_by_hash_set(network_data, io_data)
 
-        self.io_dataset = IODataset(io_net_data, io_data)
-        self.unlabeled_dataset = NetworkDataset(unlabeled_net_data)
+        self.io_dataset = IODataset(io_net_data, io_data, transform=unlabeled_transforms, io_transform=io_tranforms)
+        self.unlabeled_dataset = NetworkDataset(unlabeled_net_data, transform=unlabeled_transforms)
 
         self.io_loader = DataLoader(self.io_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
         self.unlabeled_loader = DataLoader(self.unlabeled_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
