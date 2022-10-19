@@ -36,9 +36,10 @@ class ReconstructionAccuracyMetric(BaseMetric):
         self.threshold = adj_threshold
         self.batched = batched
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+    def get_mean_metrics(self):
+        return {k: v.mean for k, v in self.metrics.items()}
 
+    def epoch_start(self):
         for v in self.metrics.values():
             v.reset()
 
@@ -65,10 +66,10 @@ class ReconstructionAccuracyMetric(BaseMetric):
         for k, v in res.items():
             self.metrics[k].add(v, batch_size=batch_size if self.batched else 1)
 
-        return res
+        return self.get_mean_metrics()
 
     def epoch_end(self):
-        super().epoch_end()
+        return self.get_mean_metrics()
 
 
 class LatentVectorMetric(BaseMetric):
@@ -76,17 +77,15 @@ class LatentVectorMetric(BaseMetric):
         super().__init__(name=name)
         self.mu_list = []
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+    def epoch_start(self):
         self.mu_list = []
 
     def next_batch(self, y_true, y_pred):
         mu = y_pred[2]
         self.mu_list.append(mu.detach().cpu())
-        return mu
 
     def epoch_end(self):
-        super().epoch_end()
+        pass
 
 
 # TODO cite that it's from arch2vec
@@ -102,7 +101,6 @@ class ValidityUniquenessMetric(LatentVectorMetric):
         self.validity_func = validity_func
 
     def epoch_end(self):
-        super().epoch_end()
         return self.compute_validity_uniqueness()
 
     def compute_validity_uniqueness(self):
@@ -143,7 +141,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
 
         validity = validity_counter / self.n_latent_points
         uniqueness = len(buckets) / (validity_counter + 1e-8)
-        return validity, uniqueness  # TODO save it, return as a dict
+        return {'validity': validity, 'uniqueness': uniqueness}
 
 
 class ValidityNasbench101:

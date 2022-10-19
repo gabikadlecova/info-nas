@@ -7,17 +7,18 @@ import numpy as np
 class BaseMetric:
     def __init__(self, name):
         self.name = name
-        self.message = ''
 
-    def epoch_start(self, message=''):
-        self.message = message
+    @abstractmethod
+    def epoch_start(self):
+        pass
 
     @abstractmethod
     def next_batch(self, y_true, y_pred):
         pass
 
+    @abstractmethod
     def epoch_end(self):
-        self.message = ''
+        pass
 
 
 class MetricList(BaseMetric):
@@ -25,20 +26,19 @@ class MetricList(BaseMetric):
         super().__init__(name=name)
         self.metric_list = metric_list
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+        self.names = [(str(i) if not len(m.name) else m.name) for i, m in enumerate(self.metric_list)]
+        unique_names = set(self.names)
+        assert len(unique_names) == len(self.names), f"Metric names must be unique: {self.names}."
 
+    def epoch_start(self):
         for m in self.metric_list:
             m.epoch_start()
 
     def next_batch(self, y_true, y_pred):
-        return [m.next_batch(y_true, y_pred) for m in self.metric_list]
+        return {n: m.next_batch(y_true, y_pred) for n, m in zip(self.names, self.metric_list)}
 
     def epoch_end(self):
-        for m in self.metric_list:
-            m.epoch_end()
-
-        super().epoch_end()
+        return {n: m.epoch_end() for n, m in zip(self.names, self.metric_list)}
 
 
 class SimpleMetric(BaseMetric):
@@ -47,26 +47,23 @@ class SimpleMetric(BaseMetric):
         super().__init__(name)
         self.pred_first = pred_first
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+    def epoch_start(self):
+        pass
 
     def next_batch(self, y_true, y_pred):
-        res = self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
-        return res
+        return self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
 
     def epoch_end(self):
-        super().epoch_end()
+        pass
 
 
-# TODO logging (e.g. wandb)
 class MeanMetric(SimpleMetric):
     def __init__(self, loss_func, name='', pred_first=True, batched=True):
         super().__init__(loss_func, name=name, pred_first=pred_first)
         self.mean_loss = OnlineMean()
         self.batched = batched
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+    def epoch_start(self):
         self.mean_loss.reset()
 
     def next_batch(self, y_true, y_pred):
@@ -74,10 +71,10 @@ class MeanMetric(SimpleMetric):
 
         batch_size = 1 if not self.batched else len(y_true)
         self.mean_loss.add(res, batch_size=batch_size)
-        return res
+        return self.mean_loss.mean
 
     def epoch_end(self):
-        super().epoch_end()
+        return self.mean_loss.mean
 
 
 class StatsMetric(SimpleMetric):
@@ -100,8 +97,7 @@ class StatsMetric(SimpleMetric):
 
         return self.metric_data
 
-    def epoch_start(self, message=''):
-        super().epoch_start(message=message)
+    def epoch_start(self):
         self.reset_data()
 
     def next_batch(self, y_true, y_pred):
@@ -110,7 +106,6 @@ class StatsMetric(SimpleMetric):
         return res
 
     def epoch_end(self):
-        super().epoch_end()
         return self.compute_metrics()
 
 
