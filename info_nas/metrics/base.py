@@ -34,11 +34,23 @@ class MetricList(BaseMetric):
         for m in self.metric_list:
             m.epoch_start()
 
+    def _apply_func(self, func):
+        result = {}
+
+        for name, m in zip(self.names, self.metric_list):
+            m_res = func(m)
+            if isinstance(m_res, dict):
+                for k, r in m_res.items():
+                    result[f"{name}_{k}"] = r
+            else:
+                result[name] = m_res
+        return result
+
     def next_batch(self, y_true, y_pred):
-        return {n: m.next_batch(y_true, y_pred) for n, m in zip(self.names, self.metric_list)}
+        return self._apply_func(lambda m: m.next_batch(y_true, y_pred))
 
     def epoch_end(self):
-        return {n: m.epoch_end() for n, m in zip(self.names, self.metric_list)}
+        return self._apply_func(lambda m: m.epoch_end())
 
 
 class SimpleMetric(BaseMetric):
