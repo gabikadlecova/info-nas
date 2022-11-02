@@ -11,7 +11,7 @@ from info_nas.metrics.losses import losses_dict
 from nasbench import api
 
 from info_nas.config import local_dataset_cfg, load_json_cfg
-from scripts.utils import experiment_transforms, get_eval_set
+from scripts_old.utils import experiment_transforms, get_eval_set
 
 
 @click.command()

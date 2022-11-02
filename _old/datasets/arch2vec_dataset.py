@@ -1,5 +1,4 @@
 import math
-import random
 from typing import List, Union
 
 import numpy as np
@@ -8,7 +7,7 @@ import os
 import torch
 
 from info_nas.config import local_dataset_cfg
-from info_nas.datasets.io.create_dataset import load_io_dataset, dataset_from_pretrained
+from _old.datasets.io.create_dataset import load_io_dataset, dataset_from_pretrained
 from arch2vec.extensions.get_nasbench101_model import get_nasbench_datasets
 from arch2vec.preprocessing.gen_json import gen_json_file
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset

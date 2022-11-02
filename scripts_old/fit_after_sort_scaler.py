@@ -2,15 +2,14 @@ import pickle
 
 import click
 import numpy as np
-import torch
 import torchvision
 from nasbench import api
 
 from info_nas.config import local_dataset_cfg
-from info_nas.datasets.io.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path, \
+from info_nas.io_dataset.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path, \
     MultByWeights
-from info_nas.datasets.io.semi_dataset import labeled_network_dataset
-from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
+from _old.datasets.io.semi_dataset import labeled_network_dataset
+from _old.datasets import prepare_labeled_dataset
 
 
 @click.command()

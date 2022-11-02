@@ -6,7 +6,7 @@ import numpy as np
 import random
 import torch
 import torch.backends.cudnn
-from info_nas.eval_old import mean_losses, eval_epoch, init_stats_dict, checkpoint_metrics_losses
+from _old.eval_old import mean_losses, eval_epoch, init_stats_dict, checkpoint_metrics_losses
 from torch.utils.tensorboard import SummaryWriter
 
 from arch2vec.models.model import VAEReconstructed_Loss
@@ -17,7 +17,7 @@ from arch2vec.extensions.get_nasbench101_model import get_arch2vec_model
 from arch2vec.utils import preprocessing, save_checkpoint_vae
 from arch2vec.models.configs import configs
 
-from info_nas.datasets.io.semi_dataset import get_train_valid_datasets
+from _old.datasets.io.semi_dataset import get_train_valid_datasets
 from info_nas.models.io_model import model_dict
 from info_nas.config import local_model_cfg, load_json_cfg
 from info_nas.metrics.losses import losses_dict

@@ -5,21 +5,18 @@ import pickle
 
 import click
 import torch
-import torchvision.transforms
 from info_nas.models.accuracy_model import train_as_infonas
 
 from info_nas.config import load_json_cfg, local_model_cfg
-from info_nas.datasets.io.transforms import get_transforms, get_all_scales, IncludeBias, MultByWeights, ToTuple, \
-    SortByWeights
 
-from info_nas.datasets.arch2vec_dataset import get_labeled_unlabeled_datasets
+from _old.datasets import get_labeled_unlabeled_datasets
 from nasbench import api
 
-from info_nas.trainer_old import train
+from _old.trainer_old import train
 
 
 # @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
-from scripts.utils import experiment_transforms
+from scripts_old.utils import experiment_transforms
 
 
 @click.command()

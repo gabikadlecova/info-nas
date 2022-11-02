@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
 import torch
 from matplotlib import pyplot as plt
 
-from info_nas.datasets.io.create_dataset import load_io_dataset
+from _old.datasets.io.create_dataset import load_io_dataset
 from info_nas.models.utils import load_extended_vae
 
 regressor_names = {

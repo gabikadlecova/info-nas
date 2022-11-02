@@ -2,10 +2,10 @@ import os
 
 import torch
 import torchvision
-from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset, split_off_valid
-from info_nas.datasets.io.semi_dataset import labeled_network_dataset
+from _old.datasets import prepare_labeled_dataset, split_off_valid
+from _old.datasets.io.semi_dataset import labeled_network_dataset
 
-from info_nas.datasets.io.transforms import ToTuple, SortByWeights, MultByWeights, IncludeBias
+from info_nas.io_dataset.transforms import ToTuple, SortByWeights, MultByWeights, IncludeBias
 
 
 def mkdir_if_not_exists(dir):

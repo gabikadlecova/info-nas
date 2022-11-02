@@ -2,9 +2,9 @@ import numpy as np
 import seaborn as sns
 import torch
 import torchvision
-from info_nas.datasets.io.transforms import IncludeBias, MultByWeights, SortByWeights
-from info_nas.datasets.arch2vec_dataset import prepare_labeled_dataset
-from info_nas.datasets.io.semi_dataset import labeled_network_dataset
+from info_nas.io_dataset.transforms import IncludeBias, MultByWeights, SortByWeights
+from _old.datasets import prepare_labeled_dataset
+from _old.datasets.io.semi_dataset import labeled_network_dataset
 
 
 def get_pred_and_orig(gen, model=None, print_freq=1000, device=None, top_k=None, batch_stop=None):

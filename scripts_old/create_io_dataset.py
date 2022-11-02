@@ -1,17 +1,12 @@
 import pickle
 
 import click
-import json
-import os
-import pandas as pd
 import torch
 
 from info_nas.config import local_dataset_cfg, load_json_cfg
-from info_nas.datasets.io.create_dataset import dataset_from_pretrained
-from info_nas.datasets.networks.pretrained import pretrain_network_dataset
+from _old.datasets.io.create_dataset import dataset_from_pretrained
 from nasbench import api
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
-from scripts.utils import mkdir_if_not_exists
 
 
 @click.command()

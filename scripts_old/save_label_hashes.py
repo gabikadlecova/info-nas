@@ -3,10 +3,10 @@ import os
 import pandas as pd
 
 from info_nas.config import local_dataset_cfg, load_json_cfg
-from info_nas.datasets.arch2vec_dataset import split_to_labeled, generate_or_load_nb_dataset
+from _old.datasets import split_to_labeled, generate_or_load_nb_dataset
 from nasbench import api
 
-from scripts.utils import mkdir_if_not_exists
+from scripts_old.utils import mkdir_if_not_exists
 
 
 @click.command()

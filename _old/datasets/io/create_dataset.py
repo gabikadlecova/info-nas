@@ -5,7 +5,7 @@ from torch import nn
 
 from typing import List, Union
 from nasbench_pytorch.model import Network as NBNetwork
-from info_nas.datasets.networks.utils import load_trained_net
+from _old.datasets.networks.utils import load_trained_net
 
 
 def load_io_dataset(dataset_path: str, device=None):

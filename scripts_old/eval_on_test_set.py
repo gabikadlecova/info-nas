@@ -10,13 +10,13 @@ from arch2vec.models.configs import configs
 from nasbench import api
 
 from info_nas.config import load_json_cfg
-from info_nas.eval_old import eval_labeled_validation
+from _old.eval_old import eval_labeled_validation
 
 from info_nas.models.accuracy_model import AccuracyModel
 from info_nas.metrics.losses import losses_dict
 
 from info_nas.models.utils import load_extended_vae
-from scripts.utils import experiment_transforms, get_eval_set
+from scripts_old.utils import experiment_transforms, get_eval_set
 
 
 @click.command()

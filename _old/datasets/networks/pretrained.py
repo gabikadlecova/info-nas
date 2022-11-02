@@ -3,7 +3,7 @@ from typing import List
 
 from nasbench_pytorch.model import Network as NBNetwork
 from nasbench_pytorch.trainer import train, test
-from info_nas.datasets.networks.utils import get_net_from_hash, save_trained_net, is_net_pretrained
+from _old.datasets.networks.utils import get_net_from_hash, save_trained_net, is_net_pretrained
 
 
 def pretrain_network_dataset(net_hashes: List[str], nasbench, dataset, device=None, num_epochs=10, num_labels=10,
