@@ -1,4 +1,4 @@
-from abc import abstractmethod
+import torch
 
 
 class BaseLogger:

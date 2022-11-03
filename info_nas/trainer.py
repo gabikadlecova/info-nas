@@ -52,7 +52,6 @@ class VAETrainer:
                     self.logger.log_message("Evaluate on the validation set.")
                     self.eval_validation(model, validation_data, epoch)
 
-            # TODO ref model train/eval
             # TODO checkpointing
 
             self.epoch_end(epoch)
@@ -116,7 +115,7 @@ class IOTrainer(VAETrainer):
 
     def train_on_batch_labeled(self, io_model, batch, epoch, i_batch):
         ops, adj, inputs, outputs = batch
-        pred_vae, pred_io = io_model(ops, adj, inputs)
+        pred_vae, pred_io = io_model(ops, adj, inputs=inputs)
 
         loss = self.unlabeled_loss.next_batch((ops, adj), pred_vae)
         labeled_loss = self.labeled_loss.next_batch(outputs, pred_io)
@@ -129,7 +128,7 @@ class IOTrainer(VAETrainer):
 
     def eval_validation_batch(self, model, batch):
         ops, adj, inputs, outputs = batch
-        pred_vae, pred_io = model(ops, adj, inputs)
+        pred_vae, pred_io = model(ops, adj, inputs=inputs)
         self.labeled_metrics.next_batch(outputs, pred_io)
         self.unlabeled_metrics.next_batch((ops, adj), pred_vae)
 
@@ -159,7 +158,9 @@ class IOTrainer(VAETrainer):
         if not is_labeled:
             return (ops, adj), is_labeled
 
-        inputs, outputs = batch['inputs'].to(self.device), batch['outputs'].to(self.device)
+        inputs = batch['inputs'].to(self.device) if 'inputs' in batch else None
+        outputs = batch['outputs'].to(self.device)
+
         return (ops, adj, inputs, outputs), is_labeled
 
     def epoch_start(self):

@@ -1,21 +1,19 @@
+import copy
+
 import torch
 import torch.nn as nn
 from abc import abstractmethod
 
-# TODO  3 ways
-#    a) encode input into a vec
-#    b) the embedding is the second actual input
-#    c) vae of io data first, then dense (u-)net
+from info_nas.models.base import ExtendedVAEModel
 from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list, get_dense_list
 
 
-class IOModel(nn.Module):
+class IOModel(ExtendedVAEModel):
     """
     A model that processes architecture data (using a VAE) as well as IO data (using the VAE encoder and a regressor).
     """
     def __init__(self, vae_model, activation=None):
-        super().__init__()
-        self.vae_model = vae_model
+        super().__init__(vae_model)
 
         if activation is None or activation.lower() == 'linear':
             self.activation = None
@@ -23,19 +21,6 @@ class IOModel(nn.Module):
             self.activation = nn.Sigmoid()
         else:
             raise ValueError("Unsupported activation")
-
-    @abstractmethod
-    def inputs_forward(self, z, inputs):
-        return inputs
-
-    def get_vae(self):
-        return self.vae_model
-
-    def forward(self, ops, args, inputs):
-        vae_out, z = self.vae_model.forward(ops, args)
-        outputs = self.inputs_forward(z, inputs)
-
-        return vae_out, outputs
 
 
 class ConcatConvModel(IOModel):
@@ -71,7 +56,7 @@ class ConcatConvModel(IOModel):
             else:
                 self.last_layer = nn.Conv2d(channels, output_channels, 1, padding=0)
 
-    def inputs_forward(self, z, inputs):
+    def extended_forward(self, z, inputs=None):
         # process 2D latent features to a vector
         z = self.process_z(z)
 
@@ -110,7 +95,7 @@ class DensePredConvModel(IOModel):
         # process concatenated data
         self.dense_list = get_dense_list(n_dense, dropout, dense_size, output_channels)
 
-    def inputs_forward(self, z, inputs):
+    def extended_forward(self, z, inputs=None):
         x = self.first_conv(inputs)
         x = self.conv_list(x)
         x = torch.mean(x, (2, 3))
