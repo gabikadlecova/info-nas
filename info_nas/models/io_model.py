@@ -1,5 +1,3 @@
-import copy
-
 import torch
 import torch.nn as nn
 from abc import abstractmethod
@@ -14,6 +12,7 @@ class IOModel(ExtendedVAEModel):
     """
     def __init__(self, vae_model, activation=None):
         super().__init__(vae_model)
+        self.model_kwargs = {'activation': activation}
 
         if activation is None or activation.lower() == 'linear':
             self.activation = None
@@ -21,6 +20,10 @@ class IOModel(ExtendedVAEModel):
             self.activation = nn.Sigmoid()
         else:
             raise ValueError("Unsupported activation")
+
+    @abstractmethod
+    def extended_forward(self, z, **kwargs):
+        pass
 
 
 class ConcatConvModel(IOModel):
@@ -31,8 +34,12 @@ class ConcatConvModel(IOModel):
     def __init__(self, vae_model, input_channels, output_channels, start_channels=128, z_hidden=16,
                  n_steps=2, n_convs=2, dense_output=True, activation=None,
                  use_3x3_for_z=False, use_3x3_for_output=False):
+        model_kwargs = locals()
+        model_kwargs.pop('self')
+        model_kwargs.pop('vae_model')
 
         super().__init__(vae_model, activation=activation)
+        self.model_kwargs = model_kwargs
 
         self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
 
@@ -81,8 +88,12 @@ class DensePredConvModel(IOModel):
     """
     def __init__(self, vae_model, input_channels, output_channels, start_channels=128, activation=None, z_hidden=16,
                  n_steps=2, n_convs=2, n_dense=1, dense_size=512, dropout=None):
+        model_kwargs = locals()
+        model_kwargs.pop('self')
+        model_kwargs.pop('vae_model')
 
         super().__init__(vae_model, activation=activation)
+        self.model_kwargs = model_kwargs
 
         # process images
         self.first_conv = ConvBnRelu(input_channels, start_channels, kernel_size=3, padding=1)

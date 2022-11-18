@@ -3,6 +3,8 @@ import torch
 from torch import nn
 from arch2vec.models.model import Model
 
+from info_nas.models.utils import get_class_path, save_model_data
+
 
 class Arch2vecPreprocessor:
     def __init__(self, parse_func=None, convert_back_func=None):
@@ -52,11 +54,18 @@ class Arch2vecModel(nn.Module):
                  activation_adj=torch.sigmoid, activation_ops=torch.softmax, adj_hidden_dim=128, ops_hidden_dim=128):
         super().__init__()
 
-        self.model = Model(input_dim=input_dim, hidden_dim=hidden_dim, latent_dim=latent_dim, num_hops=num_layers,
-                           num_mlp_layers=num_mlps, dropout=dropout, activation_adj=activation_adj,
-                           activation_ops=activation_ops, adj_hidden_dim=adj_hidden_dim, ops_hidden_dim=ops_hidden_dim,
-                           return_z=True)
+        self.model_kwargs = {
+            'input_dim': input_dim, 'hidden_dim': hidden_dim, 'latent_dim': latent_dim, 'num_hops': num_layers,
+            'num_mlp_layers': num_mlps, 'dropout': dropout, 'activation_adj': activation_adj,
+            'activation_ops': activation_ops, 'adj_hidden_dim': adj_hidden_dim, 'ops_hidden_dim': ops_hidden_dim,
+            'return_z': True
+        }
+
+        self.model = Model(**self.model_kwargs)
 
     def forward(self, ops, adj):
         out = self.model.forward(ops, adj)
         return out[:-1], out[-1]
+
+    def save_model_data(self, data=None, save_state_dict=True):
+        return save_model_data(self, kwargs=self.model_kwargs, data=data, save_state_dict=save_state_dict)
