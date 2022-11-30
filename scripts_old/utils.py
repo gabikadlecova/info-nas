@@ -5,7 +5,7 @@ import torchvision
 from _old.datasets import prepare_labeled_dataset, split_off_valid
 from _old.datasets.io.semi_dataset import labeled_network_dataset
 
-from info_nas.io_dataset.transforms import ToTuple, SortByWeights, MultByWeights, IncludeBias
+from info_nas.datasets.transforms import ToTuple, SortByWeights, MultByWeights, IncludeBias
 
 
 def mkdir_if_not_exists(dir):

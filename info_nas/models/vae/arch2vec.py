@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from arch2vec.models.model import Model
 
-from info_nas.models.utils import get_class_path, save_model_data
+from info_nas.models.utils import save_model_data
 
 
 class Arch2vecPreprocessor:

@@ -2,7 +2,7 @@ import numpy as np
 import seaborn as sns
 import torch
 import torchvision
-from info_nas.io_dataset.transforms import IncludeBias, MultByWeights, SortByWeights
+from info_nas.datasets.transforms import IncludeBias, MultByWeights, SortByWeights
 from _old.datasets import prepare_labeled_dataset
 from _old.datasets.io.semi_dataset import labeled_network_dataset
 

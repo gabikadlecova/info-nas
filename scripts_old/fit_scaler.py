@@ -3,7 +3,7 @@ import os
 
 import numpy as np
 
-from info_nas.io_dataset.transforms import Scaler, get_scale_path
+from info_nas.datasets.transforms import Scaler, get_scale_path
 from _old.datasets.io.create_dataset import load_io_dataset
 
 

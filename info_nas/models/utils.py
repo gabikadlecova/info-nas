@@ -1,11 +1,4 @@
-import os
-
-import numpy as np
-import torch
-from torch import optim
-
 from importlib import import_module
-from info_nas.models.io_model import model_dict
 
 
 def get_class_path(obj_class):

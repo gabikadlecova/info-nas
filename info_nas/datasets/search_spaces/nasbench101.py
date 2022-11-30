@@ -3,7 +3,7 @@ from typing import List
 import numpy as np
 import torch
 
-from info_nas.io_dataset.base import BaseIOExtractor, IOHook
+from info_nas.datasets.base import BaseIOExtractor, IOHook
 
 
 class NasbenchIOExtractor(BaseIOExtractor):
@@ -30,7 +30,7 @@ class NasbenchIOExtractor(BaseIOExtractor):
         # register hook to get output data
         out_layer = self.get_nth_layer(net)
         hook = IOHook(save_inputs=True, save_outputs=False)
-        reg_h = out_layer.register_forward_hook(hook)
+        reg_h = out_layer.register_forward_hook(hook.get_hook())
 
         net = net.to(device)
         net.eval()
@@ -39,7 +39,7 @@ class NasbenchIOExtractor(BaseIOExtractor):
         with torch.no_grad():
             for batch_idx, (inputs, targets) in enumerate(data):
                 inputs = inputs.to(device)
-                batch_size = batch_size if batch_size is None else len(inputs)
+                batch_size = batch_size if batch_size is not None else len(inputs)
 
                 net(inputs)
                 input_idx.append(torch.arange(len(inputs) + batch_idx * batch_size))
@@ -50,6 +50,6 @@ class NasbenchIOExtractor(BaseIOExtractor):
         res = {'outputs': hook.inputs, 'inputs': input_idx, 'labels': labels}
         if self.save_weights:
             res['weights'] = out_layer.weight
-            res['biases'] = out_layer.biases
+            res['biases'] = out_layer.bias
 
         return res

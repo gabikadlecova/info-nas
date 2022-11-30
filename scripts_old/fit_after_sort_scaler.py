@@ -6,7 +6,7 @@ import torchvision
 from nasbench import api
 
 from info_nas.config import local_dataset_cfg
-from info_nas.io_dataset.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path, \
+from info_nas.datasets.transforms import IncludeBias, load_scaler, SortByWeights, after_scale_path, get_scale_path, \
     MultByWeights
 from _old.datasets.io.semi_dataset import labeled_network_dataset
 from _old.datasets import prepare_labeled_dataset
