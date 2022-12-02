@@ -75,9 +75,9 @@ def get_all_scales(scale_dir, scale_config):
 
 class IncludeBias:
     def __call__(self, item):
-        output = item['output']
+        output = item['outputs']
         output = torch.cat([output, torch.Tensor([1.0])])
-        item['output'] = output
+        item['outputs'] = output
         item['include_bias'] = True
         return item
 
@@ -106,9 +106,9 @@ class SortByWeights:
         self.after_sort_scale = after_sort_scale
 
     def __call__(self, item):
-        output = item['output']
-        label = item['label']
-        weights, bias = item['weights'], item['bias']
+        output = item['outputs']
+        label = item['labels']
+        weights, bias = item['weights'], item['biases']
 
         include_bias = item['include_bias'] if 'include_bias' in item else False
 
@@ -137,7 +137,7 @@ class SortByWeights:
             mu, std = self.after_sort_scale['mean'], self.after_sort_scale['std']
             output = (output - mu) / std
 
-        item['output'] = output
+        item['outputs'] = output
         return item
 
 
@@ -145,24 +145,25 @@ def get_weights(item, label, include_bias=True):
     weights = item['weights'][label]
 
     if include_bias:
-        bias = item['bias'][label]
+        bias = item['biases'][label]
         weights = torch.cat([weights, bias.unsqueeze(-1)])
 
     return weights
 
 
 class MultByWeights:
-    def __init__(self, include_bias=True, normalize_row=False):
-        self.include_bias = include_bias
+    def __init__(self, normalize_row=False):
         self.normalize_row = normalize_row
 
     def __call__(self, item):
-        label, output = item['label'], item['output']
-        output *= get_weights(item, label, include_bias=self.include_bias)
+        include_bias = item['include_bias'] if 'include_bias' in item else False
+
+        label, output = item['labels'], item['outputs']
+        output *= get_weights(item, label, include_bias=include_bias)
         if self.normalize_row:
             output = (output - torch.mean(output)) / torch.std(output)
 
-        item['output'] = output
+        item['outputs'] = output
         return item
 
 
@@ -250,17 +251,17 @@ class Scaler:
             raise ValueError("The Scaler is not fitted with scale values.")
 
         net_hash = item['hash']
-        output = item['output']
-        label = item['label'].item()
+        output = item['outputs']
+        label = item['labels'].item()
 
         scales = self.net_scales[label][net_hash] if self.per_label or self.weighted else self.net_scales[net_hash]
 
         if self.normalize:
             mu, std = scales['mean'], scales['std']
-            item['output'] = (output - mu) / (std + np.finfo(np.float32).eps)
+            item['outputs'] = (output - mu) / (std + np.finfo(np.float32).eps)
         else:
             omax = scales['max']
-            item['output'] = output / (omax + np.finfo(np.float32).eps)
+            item['outputs'] = output / (omax + np.finfo(np.float32).eps)
 
         return item
 
@@ -270,4 +271,4 @@ class ToTuple:
     Convert to tuple batch instead of a dict batch.
     """
     def __call__(self, item):
-        return item['adj'], item['ops'], item['input'], item['output']
+        return item['adj'], item['ops'], item['input'], item['outputs']

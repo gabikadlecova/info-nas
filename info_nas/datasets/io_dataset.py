@@ -6,7 +6,7 @@ from typing import Dict
 
 def create_io_data(networks: Dict[str, torch.nn.Module], extractor: BaseIOExtractor, dataset,
                    save_input_images: bool = True):
-    result = {}
+    result = {'networks': {}}
 
     if save_input_images:
         images = [b[0] for b in dataset]
@@ -16,7 +16,7 @@ def create_io_data(networks: Dict[str, torch.nn.Module], extractor: BaseIOExtrac
     for net_hash, net in networks:
         io_data = extractor.get_io_data(net, dataset)
 
-        result[net_hash] = io_data
+        result['networks'][net_hash] = io_data
 
     return result
 
@@ -25,14 +25,11 @@ class IODataset(NetworkDataset):
     def __init__(self, network_data, io_data, transform=None, label_transform=None):
         super().__init__(network_data, transform=transform)
         self.io_data = io_data
-        self.io_transform = label_transform
+        self.label_transform = label_transform
 
         # check if all IO data has the same dimensions
         self.io_len = None
-        for k, v in io_data.items():
-            if k == 'images':
-                continue
-
+        for k, v in io_data['networks'].items():
             if self.io_len is None:
                 self.io_len = len(v['outputs'])
 
@@ -48,7 +45,7 @@ class IODataset(NetworkDataset):
         net_data = super().__getitem__(div_index)
 
         image_index = index % self.io_len
-        net_io = self.io_data[self.hash_list[div_index]]
+        net_io = self.io_data['networks'][self.hash_list[div_index]]
 
         image_data = {'weights': net_io['weights'], 'biases': net_io['biases']}
         for k in ['inputs', 'outputs', 'labels']:
@@ -58,6 +55,6 @@ class IODataset(NetworkDataset):
 
         net_data.update(image_data)
         if self.label_transform is not None:
-            net_data = self.transform(net_data)
+            net_data = self.label_transform(net_data)
 
         return net_data

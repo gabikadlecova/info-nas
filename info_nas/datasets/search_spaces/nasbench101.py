@@ -42,12 +42,12 @@ class NasbenchIOExtractor(BaseIOExtractor):
                 batch_size = batch_size if batch_size is not None else len(inputs)
 
                 net(inputs)
-                input_idx.append(torch.arange(len(inputs) + batch_idx * batch_size))
+                input_idx.append(torch.arange(len(inputs)) + batch_idx * batch_size)
                 labels.append(targets)
 
         reg_h.remove()
 
-        res = {'outputs': hook.inputs, 'inputs': input_idx, 'labels': labels}
+        res = {'outputs': torch.cat(hook.inputs), 'inputs': torch.cat(input_idx), 'labels': torch.cat(labels)}
         if self.save_weights:
             res['weights'] = out_layer.weight
             res['biases'] = out_layer.bias

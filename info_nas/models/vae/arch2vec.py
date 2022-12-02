@@ -69,3 +69,7 @@ class Arch2vecModel(nn.Module):
 
     def save_model_data(self, data=None, save_state_dict=True):
         return save_model_data(self, kwargs=self.model_kwargs, data=data, save_state_dict=save_state_dict)
+
+    @property
+    def latent_dim(self):
+        return self.model.latent_dim

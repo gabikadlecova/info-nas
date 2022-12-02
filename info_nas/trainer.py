@@ -22,8 +22,8 @@ class VAETrainer:
         self.device = device
         self.clip = clip
 
-    def train(self, model, train_data, validation_data=None, n_epochs=1):
-        model = model.to(self.device)
+    def train(self, train_data, validation_data=None, n_epochs=1):
+        model = self.model.to(self.device)
 
         for epoch in range(n_epochs):
             self.logger.log_message(f"Epoch {epoch}")
@@ -68,7 +68,7 @@ class VAETrainer:
         return loss
 
     def process_batch(self, batch):
-        ops, adj = batch['adj'].to(self.device), batch['ops'].to(self.device)
+        ops, adj = batch['ops'].to(self.device), batch['adj'].to(self.device)
         ops, adj = self.preprocessor.preprocess(ops, adj)
 
         return ops, adj.to(torch.long)
@@ -109,7 +109,7 @@ class IOTrainer(VAETrainer):
     def train_on_batch(self, model, batch, epoch, i_batch):
         batch, is_labeled = batch
         if is_labeled:
-            return super().train_on_batch(model.vae_model(), batch, epoch, i_batch)
+            return super().train_on_batch(model.vae_model, batch, epoch, i_batch)
         else:
             return self.train_on_batch_labeled(model, batch, epoch, i_batch)
 

@@ -28,13 +28,13 @@ class IOHook:
         return hook
 
 
-def split_by_hash_set(data_dict, hash_set):
+def split_by_hash_set(data_dict, hash_set, copy=True):
     contains, rest = {}, {}
     for k, v in data_dict.items():
         if k in hash_set:
-            contains[k] = v
+            contains[k] = v.copy() if copy else v
         else:
-            rest[k] = v
+            rest[k] = v.copy() if copy else v
 
     return contains, rest
 
@@ -57,12 +57,11 @@ def net_hash_set_split(network_data, hash_set, io_data=None):
 
 
 class SemiSupervisedDataset:
-    def __init__(self, name, labeled_class, labeled_data, network_data, k=1, batch_size=32, shuffle=True,
-                 label_transform=None, transform=None, **kwargs):
+    def __init__(self, name, labeled_class, labeled_data, network_data, labeled_k=1, unlabeled_k=1, batch_size=32,
+                 shuffle=True, label_transform=None, transform=None, **kwargs):
         self.name = name
-        self.k = k
 
-        labeled_net_data, unlabeled_net_data = split_by_hash_set(network_data, labeled_data)
+        labeled_net_data, unlabeled_net_data = split_by_hash_set(network_data, labeled_data['networks'])
 
         self.io_dataset = labeled_class(labeled_net_data, labeled_data, transform=transform,
                                         label_transform=label_transform)
@@ -71,8 +70,17 @@ class SemiSupervisedDataset:
         self.io_loader = DataLoader(self.io_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
         self.unlabeled_loader = DataLoader(self.unlabeled_dataset, batch_size=batch_size, shuffle=shuffle, **kwargs)
 
-        self.n_labeled = len(self.io_loader) // (k * len(self.unlabeled_loader))
-        assert self.n_labeled > 0
+        self.labeled_k = labeled_k
+        self.unlabeled_k = unlabeled_k
+
+        self.io_len = labeled_k * len(self.io_loader)
+        self.un_len = unlabeled_k * len(self.unlabeled_loader)
+
+        self.n_labeled = max(1, self.io_len // self.un_len)
+        self.n_unlabeled = max(1, self.un_len // self.io_len)
+
+    def __len__(self):
+        return self.un_len + self.io_len
 
     def __iter__(self):
         labeled_iter = self._next_labeled()
@@ -81,22 +89,23 @@ class SemiSupervisedDataset:
         while True:
             for _ in range(self.n_labeled):
                 yield self._next_batch(labeled_iter, unlabeled_iter)
-            yield self._next_batch(unlabeled_iter, labeled_iter)
+            for _ in range(self.n_unlabeled):
+                yield self._next_batch(unlabeled_iter, labeled_iter)
 
     @staticmethod
     def _next_batch(first_it, backup_it):
         try:
-            yield next(first_it)
+            return next(first_it)
         except StopIteration:
-            while True:
-                yield next(backup_it)
+            return next(backup_it)
 
     def _next_labeled(self):
-        for data in self.io_loader:
-            yield data, True
+        for _ in range(self.labeled_k):
+            for data in self.io_loader:
+                yield data, True
 
     def _next_unlabeled(self):
-        for _ in range(self.k):
+        for _ in range(self.unlabeled_k):
             for data in self.unlabeled_loader:
                 yield data, False
 
