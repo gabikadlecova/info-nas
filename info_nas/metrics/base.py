@@ -13,7 +13,7 @@ class BaseMetric:
         pass
 
     @abstractmethod
-    def next_batch(self, y_true, y_pred):
+    def next_batch(self, y_pred, y_true):
         pass
 
     @abstractmethod
@@ -46,8 +46,8 @@ class MetricList(BaseMetric):
                 result[name] = m_res
         return result
 
-    def next_batch(self, y_true, y_pred):
-        return self._apply_func(lambda m: m.next_batch(y_true, y_pred))
+    def next_batch(self, y_pred, y_true):
+        return self._apply_func(lambda m: m.next_batch(y_pred, y_true))
 
     def epoch_end(self):
         return self._apply_func(lambda m: m.epoch_end())
@@ -62,7 +62,7 @@ class SimpleMetric(BaseMetric):
     def epoch_start(self):
         pass
 
-    def next_batch(self, y_true, y_pred):
+    def next_batch(self, y_pred, y_true):
         return self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
 
     def epoch_end(self):
@@ -70,20 +70,22 @@ class SimpleMetric(BaseMetric):
 
 
 class MeanMetric(SimpleMetric):
-    def __init__(self, loss_func, name='', pred_first=True, batched=True):
+    def __init__(self, loss_func, name='', pred_first=True, batched=True, detach=True):
         super().__init__(loss_func, name=name, pred_first=pred_first)
         self.mean_loss = OnlineMean()
         self.batched = batched
+        self.detach = detach
 
     def epoch_start(self):
         self.mean_loss.reset()
 
-    def next_batch(self, y_true, y_pred):
-        res = super().next_batch(y_true, y_pred)
+    def next_batch(self, y_pred, y_true):
+        res = super().next_batch(y_pred, y_true)
+        add_res = res if not self.detach else res.detach().numpy()
 
         batch_size = 1 if not self.batched else len(y_true)
-        self.mean_loss.add(res, batch_size=batch_size)
-        return self.mean_loss.mean
+        self.mean_loss.add(add_res, batch_size=batch_size)
+        return res
 
     def epoch_end(self):
         return self.mean_loss.mean
@@ -112,8 +114,8 @@ class StatsMetric(SimpleMetric):
     def epoch_start(self):
         self.reset_data()
 
-    def next_batch(self, y_true, y_pred):
-        res = super().next_batch(y_true, y_pred)
+    def next_batch(self, y_pred, y_true):
+        res = super().next_batch(y_pred, y_true)
         self.data_list.append(res)
         return res
 

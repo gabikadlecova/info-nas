@@ -61,7 +61,7 @@ class VAETrainer:
     def train_on_batch(self, model, batch, epoch, i_batch):
         ops, adj = batch
         pred = model(ops, adj)
-        loss = self.unlabeled_loss.next_batch((ops, adj), pred)
+        loss = self.unlabeled_loss.next_batch(pred, (ops, adj))
 
         self.logger.log_batch_metric(self.unlabeled_loss.name, loss.detach().item(), epoch, i_batch)
 
@@ -71,12 +71,12 @@ class VAETrainer:
         ops, adj = batch['ops'].to(self.device), batch['adj'].to(self.device)
         ops, adj = self.preprocessor.preprocess(ops, adj)
 
-        return ops, adj.to(torch.long)
+        return ops, adj
 
     def eval_validation_batch(self, model, batch):
         ops, adj = batch
         pred = model(ops, adj)
-        self.unlabeled_metrics.next_batch((ops, adj), pred)
+        self.unlabeled_metrics.next_batch(pred, (ops, adj))
 
     def eval_validation(self, model, validation_set, epoch, val_name='val'):
         model.eval()
@@ -109,16 +109,16 @@ class IOTrainer(VAETrainer):
     def train_on_batch(self, model, batch, epoch, i_batch):
         batch, is_labeled = batch
         if is_labeled:
-            return super().train_on_batch(model.vae_model, batch, epoch, i_batch)
-        else:
             return self.train_on_batch_labeled(model, batch, epoch, i_batch)
+        else:
+            return super().train_on_batch(model.vae_model, batch, epoch, i_batch)
 
     def train_on_batch_labeled(self, io_model, batch, epoch, i_batch):
         ops, adj, inputs, outputs = batch
         pred_vae, pred_io = io_model(ops, adj, inputs=inputs)
 
-        loss = self.unlabeled_loss.next_batch((ops, adj), pred_vae)
-        labeled_loss = self.labeled_loss.next_batch(outputs, pred_io)
+        loss = self.unlabeled_loss.next_batch(pred_vae, (ops, adj))
+        labeled_loss = self.labeled_loss.next_batch(pred_io, outputs)
 
         self.logger.log_batch_metric(self.unlabeled_loss.name, loss.detach().item(), epoch, i_batch)
         self.logger.log_batch_metric(self.labeled_loss.name, labeled_loss.detach().item(), epoch, i_batch)
@@ -129,8 +129,8 @@ class IOTrainer(VAETrainer):
     def eval_validation_batch(self, model, batch):
         ops, adj, inputs, outputs = batch
         pred_vae, pred_io = model(ops, adj, inputs=inputs)
-        self.labeled_metrics.next_batch(outputs, pred_io)
-        self.unlabeled_metrics.next_batch((ops, adj), pred_vae)
+        self.labeled_metrics.next_batch(pred_io, outputs)
+        self.unlabeled_metrics.next_batch(pred_vae, (ops, adj))
 
     def eval_validation(self, model, validation_set, epoch, val_name='validation'):
         model.eval()

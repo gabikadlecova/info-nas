@@ -19,7 +19,7 @@ class Arch2vecPreprocessor:
 
     def preprocess(self, ops, adj):
         adj = adj + adj.triu(1).transpose(-1, -2)
-        return ops, adj
+        return ops, adj.to(torch.long).to(torch.float)
 
     def process_reverse(self, ops, adj):
         return ops, adj.triu(1)
@@ -36,7 +36,7 @@ def parse_nasbench101(ops, adj, nb_rows=7):
         col = transform_dict[op]
         ops_array[row, col] = 1
 
-    return ops_array, adj
+    return ops_array.astype(np.float32), adj.astype(np.float32)
 
 
 def convert_to_nasbench101(ops, adj):
@@ -63,9 +63,9 @@ class Arch2vecModel(nn.Module):
 
         self.model = Model(**self.model_kwargs)
 
-    def forward(self, ops, adj):
+    def forward(self, ops, adj, return_z=False):
         out = self.model.forward(ops, adj)
-        return out[:-1], out[-1]
+        return out[:-1] if not return_z else (out[:-1], out[-1])
 
     def save_model_data(self, data=None, save_state_dict=True):
         return save_model_data(self, kwargs=self.model_kwargs, data=data, save_state_dict=save_state_dict)

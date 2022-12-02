@@ -43,7 +43,7 @@ class ReconstructionAccuracyMetric(BaseMetric):
         for v in self.metrics.values():
             v.reset()
 
-    def next_batch(self, y_true, y_pred):
+    def next_batch(self, y_pred, y_true):
         res = {}
 
         ops_recon, adj_recon, _, _, _ = y_pred
@@ -80,7 +80,7 @@ class LatentVectorMetric(BaseMetric):
     def epoch_start(self):
         self.mu_list = []
 
-    def next_batch(self, y_true, y_pred):
+    def next_batch(self, y_pred, y_true):
         mu = y_pred[2]
         self.mu_list.append(mu.detach().cpu())
 

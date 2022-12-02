@@ -22,7 +22,7 @@ class ExtendedVAEModel(nn.Module):
         pass
 
     def forward(self, ops, adj, **kwargs):
-        vae_out, z = self.vae_model.forward(ops, adj)
+        vae_out, z = self.vae_model.forward(ops, adj, return_z=True)
         outputs = self.extended_forward(z, **kwargs)
 
         return vae_out, outputs
