@@ -22,13 +22,21 @@ class BaseMetric:
 
 
 class MetricList(BaseMetric):
-    def __init__(self, metric_list: List[BaseMetric], name=''):
+    def __init__(self, metric_list: List[BaseMetric] = None, name=''):
         super().__init__(name=name)
-        self.metric_list = metric_list
+        self.metric_list = metric_list if metric_list is not None else []
 
         self.names = [(str(i) if not len(m.name) else m.name) for i, m in enumerate(self.metric_list)]
-        unique_names = set(self.names)
-        assert len(unique_names) == len(self.names), f"Metric names must be unique: {self.names}."
+        self.unique_names = set(self.names)
+        assert len(metric_list) == len(self.unique_names), f"Metric names must be unique: {self.names}."
+
+    def add_metric(self, metric: BaseMetric):
+        assert metric.name is not None and len(metric.name), "Metric must have a name."
+        assert metric.name not in self.unique_names, f"Metric names must be unique: {metric.name}, {self.unique_names}."
+
+        self.metric_list.append(metric)
+        self.names.append(metric.name)
+        self.unique_names.add(metric.name)
 
     def epoch_start(self):
         for m in self.metric_list:
@@ -54,16 +62,18 @@ class MetricList(BaseMetric):
 
 
 class SimpleMetric(BaseMetric):
-    def __init__(self, loss_func, name='', pred_first=True):
+    def __init__(self, loss_func, name='', pred_first=True, detach=True):
         self.loss_func = loss_func
         super().__init__(name)
         self.pred_first = pred_first
+        self.detach = detach
 
     def epoch_start(self):
         pass
 
     def next_batch(self, y_pred, y_true):
-        return self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
+        loss = self.loss_func(y_pred, y_true) if self.pred_first else self.loss_func(y_true, y_pred)
+        return loss.detach().cpu() if self.detach else loss
 
     def epoch_end(self):
         pass
@@ -71,10 +81,9 @@ class SimpleMetric(BaseMetric):
 
 class MeanMetric(SimpleMetric):
     def __init__(self, loss_func, name='', pred_first=True, batched=True, detach=True):
-        super().__init__(loss_func, name=name, pred_first=pred_first)
+        super().__init__(loss_func, name=name, pred_first=pred_first, detach=detach)
         self.mean_loss = OnlineMean()
         self.batched = batched
-        self.detach = detach
 
     def epoch_start(self):
         self.mean_loss.reset()

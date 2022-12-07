@@ -6,7 +6,7 @@ from info_nas.config import local_dataset_cfg, load_json_cfg
 from _old.datasets import split_to_labeled, generate_or_load_nb_dataset
 from nasbench import api
 
-from scripts_old.utils import mkdir_if_not_exists
+from _old.scripts_old.utils import mkdir_if_not_exists
 
 
 @click.command()

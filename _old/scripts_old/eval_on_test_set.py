@@ -16,7 +16,7 @@ from info_nas.models.accuracy_model import AccuracyModel
 from info_nas.metrics.losses import losses_dict
 
 from info_nas.models.utils import load_extended_vae
-from scripts_old.utils import experiment_transforms, get_eval_set
+from _old.scripts_old.utils import experiment_transforms, get_eval_set
 
 
 @click.command()

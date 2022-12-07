@@ -7,12 +7,14 @@ from info_nas.metrics.base import BaseMetric, MeanMetric, MetricList, SimpleMetr
 
 class VAETrainer:
     def __init__(self, model, optimizer, preprocessor, loss, metrics, logger: BaseLogger = None,
-                 verbose=1, device=None, clip=5):
+                 verbose=1, device=None, clip=5, add_loss_to_metrics=True):
 
         self.logger = logger if logger is not None else BaseLogger(verbose=verbose)
 
         self.unlabeled_loss = init_loss(loss, name='unlabeled_loss')
         self.unlabeled_metrics = init_metrics(metrics, name='unlabeled_metrics')
+        if add_loss_to_metrics:
+            self.unlabeled_metrics.add_metric(self.unlabeled_loss)
 
         self.preprocessor = preprocessor
         self.model = model
@@ -40,6 +42,8 @@ class VAETrainer:
                 nn.utils.clip_grad_norm_(model.parameters(), self.clip)
                 self.optimizer.step()
 
+            self.epoch_end(epoch)
+
             if validation_data is not None:
                 # eval on one or multiple validation sets
                 if isinstance(validation_data, dict):
@@ -54,7 +58,6 @@ class VAETrainer:
 
             # TODO checkpointing
 
-            self.epoch_end(epoch)
 
         self.logger.log_message("End of training.", priority=2)
 
@@ -99,12 +102,15 @@ class VAETrainer:
 
 class IOTrainer(VAETrainer):
     def __init__(self, model, optimizer, preprocessor, loss, metrics, labeled_loss, labeled_metrics, verbose=True,
-                 device=None, clip=5):
+                 device=None, clip=5, add_loss_to_metrics=True):
 
-        super().__init__(model, optimizer, preprocessor, loss, metrics, verbose=verbose, device=device, clip=clip)
+        super().__init__(model, optimizer, preprocessor, loss, metrics, verbose=verbose, device=device, clip=clip,
+                         add_loss_to_metrics=add_loss_to_metrics)
 
         self.labeled_loss = init_loss(labeled_loss, name='labeled_loss')
         self.labeled_metrics = init_metrics(labeled_metrics, name='labeled_metrics')
+        if add_loss_to_metrics:
+            self.labeled_metrics.add_metric(self.labeled_loss)
 
     def train_on_batch(self, model, batch, epoch, i_batch):
         batch, is_labeled = batch

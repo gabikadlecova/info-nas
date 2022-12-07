@@ -3,30 +3,41 @@ import random
 import click
 import json
 import os
-
-import numpy as np
+import pandas as pd
 import torch
 
 from info_nas.config import local_dataset_cfg, load_json_cfg
 from _old.datasets.networks import pretrain_network_dataset
 from nasbench import api
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
-from scripts_old.utils import mkdir_if_not_exists
+from _old.scripts_old.utils import mkdir_if_not_exists
 
 
 @click.command()
-@click.argument('hash')
+@click.argument('hashes_dir')
+@click.argument('chunk_no')
+@click.option('--hash_csv', default=None, help='Path to csv file with a column that contains nasbench hashes for'
+                                               ' training.')
+@click.option('--prefix', default='hashes_')
 @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
 @click.option('--config_path', default='../configs/pretrain_config.json')
-@click.option('--out_dir', default='.')
 @click.option('--root', default='../data/cifar/')
 @click.option('--seed', default=1)
-@click.option('--n_seeds', default=10)
 @click.option('--device', default='cuda')
-def main(hash, nasbench_path, config_path, out_dir, root, seed, n_seeds, device):
+def main(hashes_dir, chunk_no, hash_csv, prefix, nasbench_path, config_path, root, seed, device):
     device = torch.device(device)
 
-    out_dir = os.path.join(out_dir, f"out_{hash}/")
+    # load hashes
+    if hash_csv is None:
+        chunk_path = os.path.join(hashes_dir, f"{prefix}{chunk_no}.csv")
+        df = pd.read_csv(chunk_path)
+        out_dir = os.path.join(hashes_dir, f"out_{chunk_no}/")
+    else:
+        df = pd.read_csv(hash_csv)
+        dirname, hashname = os.path.split(hash_csv)
+        out_dir = os.path.join(dirname, f"out_{os.path.splitext(hashname)}/")
+
+    hash_list = df['hashes'].to_list()
     mkdir_if_not_exists(out_dir)
 
     # pretrain
@@ -42,19 +53,13 @@ def main(hash, nasbench_path, config_path, out_dir, root, seed, n_seeds, device)
         json.dump(config, f, indent='    ')
 
     nasbench = api.NASBench(nasbench_path)
+
     random.seed(seed)
     torch.manual_seed(seed)
     dataset = prepare_dataset(root=root, random_state=seed, **config['cifar-10'])
 
-    for i in range(n_seeds):
-        np.random.seed(i)
-        torch.manual_seed(i)
-        random.seed(i)
-
-        out_path_i = os.path.join(out_dir, str(i))
-
-        pretrain_network_dataset([hash], nasbench, dataset, device=device, dir_path=out_path_i,
-                                 **config['pretrain'])
+    pretrain_network_dataset(hash_list, nasbench, dataset, device=device, dir_path=out_dir,
+                             **config['pretrain'])
 
 
 if __name__ == "__main__":

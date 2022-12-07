@@ -37,7 +37,7 @@ class ReconstructionAccuracyMetric(BaseMetric):
         self.batched = batched
 
     def get_mean_metrics(self):
-        return {k: v.mean for k, v in self.metrics.items()}
+        return {k: v.mean() for k, v in self.metrics.items()}
 
     def epoch_start(self):
         for v in self.metrics.values():
@@ -55,10 +55,10 @@ class ReconstructionAccuracyMetric(BaseMetric):
         batch_size, adj_dim, _ = adj.shape
 
         res['ops_accuracy'] = ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item()
-        res['adj_recall'] = adj_recon[adj.type(torch.bool)].sum().item() / adj.sum()
+        res['adj_recall'] = adj_recon[adj.type(torch.bool)].sum().item() / adj.sum().item()
 
         triangle_div = batch_size * adj_dim * (adj_dim - 1) / 2.0
-        res['adj_false_pos'] = adj_recon[(~adj.type(torch.bool)).triu(1)].sum().item() / (triangle_div - adj.sum())
+        res['adj_false_pos'] = (adj_recon[(~adj.type(torch.bool)).triu(1)].sum() / (triangle_div - adj.sum())).item()
 
         adj_recon_thre = adj_recon > self.threshold
         res['adj_accuracy'] = adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div

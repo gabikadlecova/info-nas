@@ -16,7 +16,7 @@ from _old.trainer_old import train
 
 
 # @click.option('--nasbench_path', default='../data/nasbench_only108.tfrecord')
-from scripts_old.utils import experiment_transforms
+from _old.scripts_old.utils import experiment_transforms
 
 
 @click.command()

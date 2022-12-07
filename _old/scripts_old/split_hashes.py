@@ -3,7 +3,7 @@ import os
 import click
 import pandas as pd
 
-from scripts_old.utils import mkdir_if_not_exists
+from _old.scripts_old.utils import mkdir_if_not_exists
 
 
 @click.command()
