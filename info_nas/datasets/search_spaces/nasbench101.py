@@ -1,9 +1,23 @@
-from typing import List
-
-import numpy as np
 import torch
 
 from info_nas.datasets.base import BaseIOExtractor, IOHook
+from tqdm import tqdm
+
+
+def get_nb101_graphs(nb, preprocessor, verbose=True):
+    nb_net_data = {}
+
+    if verbose:
+        print("Loading nasbench101 graphs.")
+
+    for net_hash in tqdm(nb.hash_iterator(), disable=not verbose):
+
+        data = nb.get_metrics_from_hash(net_hash)
+        ops, adj = data[0]['module_operations'], data[0]['module_adjacency']
+        ops, adj = preprocessor.parse_net(ops, adj)
+        nb_net_data[net_hash] = {'adj': adj, 'ops': ops}
+
+    return nb_net_data
 
 
 class NasbenchIOExtractor(BaseIOExtractor):
