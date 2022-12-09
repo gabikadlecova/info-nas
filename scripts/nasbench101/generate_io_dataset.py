@@ -35,8 +35,8 @@ def load_cifar10(key, batch_size, num_workers, root, random_state):
 
 
 @click.command()
-@click.option('save_path')
-@click.option('dataset_dir')
+@click.argument('save_path')
+@click.argument('dataset_dir')
 @click.option('--nasbench', default='../../data/nasbench_only108.tfrecord')
 @click.option('--dataset_name', default='dataset.csv')
 @click.option('--root', default='../../data/cifar/')
