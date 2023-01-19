@@ -1,10 +1,10 @@
 import numpy as np
-import torch
-from torch import nn
 from nasbench import api
 from nasbench.lib import graph_util
+import torch
+from torch import nn
+from torchmetrics import Metric
 
-from info_nas.metrics.base import BaseMetric, OnlineMean
 from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
 
 
@@ -28,67 +28,68 @@ class VAELoss:
         return loss + kl_div
 
 
-class ReconstructionAccuracyMetric(BaseMetric):
-    def __init__(self, prepro: Arch2vecPreprocessor, name='reconstruction_accuracy', adj_threshold=0.5, batched=True):
-        super().__init__(name=name)
-        self.prepro = prepro
-        self.metrics = {k: OnlineMean() for k in ['ops_accuracy', 'adj_recall', 'adj_false_pos', 'adj_accuracy']}
-        self.threshold = adj_threshold
-        self.batched = batched
+class ReconstructionMetrics(Metric):
+    def __init__(self, preprocessor):
+        super().__init__()
+        self.add_state("ops_acc", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("adj_recall", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("adj_fp", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("adj_acc", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
 
-    def get_mean_metrics(self):
-        return {k: v.mean() for k, v in self.metrics.items()}
+        self.preprocessor = preprocessor
 
-    def epoch_start(self):
-        for v in self.metrics.values():
-            v.reset()
-
-    def next_batch(self, y_pred, y_true):
-        res = {}
-
-        ops_recon, adj_recon, _, _, _ = y_pred
-        ops, adj = y_true
-
-        ops_recon, adj_recon = self.prepro.process_reverse(ops_recon, adj_recon)
-        ops, adj = self.prepro.process_reverse(ops, adj)
-
-        batch_size, adj_dim, _ = adj.shape
-
-        res['ops_accuracy'] = ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item()
-        res['adj_recall'] = adj_recon[adj.type(torch.bool)].sum().item() / adj.sum().item()
-
-        triangle_div = batch_size * adj_dim * (adj_dim - 1) / 2.0
-        res['adj_false_pos'] = (adj_recon[(~adj.type(torch.bool)).triu(1)].sum() / (triangle_div - adj.sum())).item()
-
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        ops, adj, ops_recon, adj_recon = _get_adj_ops(preds, target, self.preprocessor)
         adj_recon_thre = adj_recon > self.threshold
-        res['adj_accuracy'] = adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div
+        triangle_div = _get_triangle_div(adj)
 
-        for k, v in res.items():
-            self.metrics[k].add(v, batch_size=batch_size if self.batched else 1)
+        self.ops_acc += ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item()
+        self.adj_recall += adj_recon[adj.type(torch.bool)].sum().item() / adj.sum().item()
+        self.adj_fp += (adj_recon[(~adj.type(torch.bool)).triu(1)].sum() / (triangle_div - adj.sum())).item()
+        self.adj_acc += adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div
 
-        return self.get_mean_metrics()
+        self.total += 1
 
-    def epoch_end(self):
-        return self.get_mean_metrics()
+    def compute(self):
+        all_metrics = {
+            'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc
+        }
+        return {name: m.float() / self.total for name, m in all_metrics.items()}
 
 
-class LatentVectorMetric(BaseMetric):
-    def __init__(self, name=''):
-        super().__init__(name=name)
-        self.mu_list = []
+def _get_adj_ops(preds, target, prepro):
+    ops_recon, adj_recon, _, _, _ = preds
+    ops, adj = target
 
-    def epoch_start(self):
-        self.mu_list = []
+    ops_recon, adj_recon = prepro.process_reverse(ops_recon, adj_recon)
+    ops, adj = prepro.process_reverse(ops, adj)
+    return ops, adj, ops_recon, adj_recon
 
-    def next_batch(self, y_pred, y_true):
-        mu = y_pred[2]
-        self.mu_list.append(mu.detach().cpu())
 
-    def epoch_end(self):
-        pass
+def _get_triangle_div(adj):
+    batch_size, adj_dim, _ = adj.shape
+    return batch_size * adj_dim * (adj_dim - 1) / 2.0
 
 
 # TODO cite that it's from arch2vec
+class ValidityUniqueness(Metric):
+    def __init__(self, preprocessor):
+        super().__init__()
+        self.add_state("validity", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("uniqueness", default=torch.tensor(0), dist_reduce_fx="sum")
+
+        self.preprocessor = preprocessor
+
+    def update(self, preds: torch.Tensor, target: torch.Tensor):
+        mu = preds[2]
+        self.mu_list.append(mu.detach().cpu())
+        # TODO avg and var from a stream
+
+    def compute(self):
+        pass
+
+
 class ValidityUniquenessMetric(LatentVectorMetric):
     def __init__(self, model, validity_func, prepro: Arch2vecPreprocessor, name='validity_uniqueness',
                  n_latent_points=10000, device=None):

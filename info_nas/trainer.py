@@ -4,203 +4,85 @@ from torch import nn
 from info_nas.logging.base import BaseLogger
 from info_nas.metrics.base import BaseMetric, MeanMetric, MetricList, SimpleMetric
 
+import pytorch_lightning as pl
 
-class VAETrainer:
-    def __init__(self, model, optimizer, preprocessor, loss, metrics, logger: BaseLogger = None,
-                 verbose=1, device=None, clip=5, add_loss_to_metrics=True):
 
-        self.logger = logger if logger is not None else BaseLogger(verbose=verbose)
-
-        self.unlabeled_loss = init_loss(loss, name='unlabeled_loss')
-        self.unlabeled_metrics = init_metrics(metrics, name='unlabeled_metrics')
-        if add_loss_to_metrics:
-            self.unlabeled_metrics.add_metric(self.unlabeled_loss)
-
-        self.preprocessor = preprocessor
+class NetworkVAE(pl.LightningModule):
+    def __init__(self, model, loss, preprocessor, train_metrics=None, valid_metrics=None, test_metrics=None):
+        super().__init__()
         self.model = model
-        self.optimizer = optimizer
+        self.loss = _init_loss(loss)
+        self.metrics = {'train': train_metrics, 'val': valid_metrics, 'test': test_metrics}
+        self.preprocessor = preprocessor
 
-        self.verbose = verbose  # TODO add tqdm
-        self.device = device
-        self.clip = clip
+    def training_step(self, batch, batch_idx):
+        return self._step(batch, batch_idx, 'train', prog_bar=True)
 
-    def train(self, train_data, validation_data=None, n_epochs=1):
-        model = self.model.to(self.device)
+    def validation_step(self, batch, batch_idx, dataloader_idx):
+        return self._step(batch, batch_idx, 'val')
 
-        for epoch in range(n_epochs):
-            self.logger.log_message(f"Epoch {epoch}")
-            self.epoch_start()
-            model.train()
+    def test_step(self, batch, batch_idx, dataloader_idx):
+        return self._step(batch, batch_idx, 'test')
 
-            for i_batch, batch in enumerate(train_data):
-                self.optimizer.zero_grad()
+    def _step(self, batch, batch_idx, dataset_name, prog_bar=False):
+        ops, adj = self._process_batch(batch)
 
-                batch = self.process_batch(batch)
-                loss = self.train_on_batch(model, batch, epoch, i_batch)
+        pred = self.model(ops, adj)
+        loss = self.loss[dataset_name](pred, (ops, adj))
 
-                loss.backward()
-                nn.utils.clip_grad_norm_(model.parameters(), self.clip)
-                self.optimizer.step()
-
-            self.epoch_end(epoch)
-
-            if validation_data is not None:
-                # eval on one or multiple validation sets
-                if isinstance(validation_data, dict):
-                    self.logger.log_message("Evaluate on validation sets.")
-
-                    for val_key, val_set in validation_data.items():
-                        self.logger.log_message(f"Val set: {val_key}", priority=2)
-                        self.eval_validation(model, val_set, epoch, val_name=val_key)
-                else:
-                    self.logger.log_message("Evaluate on the validation set.")
-                    self.eval_validation(model, validation_data, epoch)
-
-            # TODO checkpointing
-
-
-        self.logger.log_message("End of training.", priority=2)
-
-    def train_on_batch(self, model, batch, epoch, i_batch):
-        ops, adj = batch
-        pred = model(ops, adj)
-        loss = self.unlabeled_loss.next_batch(pred, (ops, adj))
-
-        self.logger.log_batch_metric(self.unlabeled_loss.name, loss.detach().item(), epoch, i_batch)
+        self.log(f'{dataset_name}/loss', loss, prog_bar=prog_bar)
+        self._eval_metrics(pred, (ops, adj), self.metrics[dataset_name], dataset_name)
 
         return loss
 
-    def process_batch(self, batch):
-        ops, adj = batch['ops'].to(self.device), batch['adj'].to(self.device)
+    def _eval_metrics(self, pred, true, metrics, prefix):
+        for m_name, metric in metrics.items():
+            res = metric(pred, true)
+            self.log(f"{prefix}/{m_name}", res)
+
+    def _process_batch(self, batch):
+        ops, adj = batch['ops'], batch['adj']
         ops, adj = self.preprocessor.preprocess(ops, adj)
 
         return ops, adj
 
-    def eval_validation_batch(self, model, batch):
-        ops, adj = batch
-        pred = model(ops, adj)
-        self.unlabeled_metrics.next_batch(pred, (ops, adj))
 
-    def eval_validation(self, model, validation_set, epoch, val_name='val'):
-        model.eval()
-        self.unlabeled_metrics.epoch_start()
+class InfoNAS(NetworkVAE):
+    def __init__(self, model, loss, labeled_loss, preprocessor, train_metrics=None, labeled_train_metrics=None,
+                 valid_metrics=None, labeled_valid_metrics=None, test_metrics=None, labeled_test_metrics=None):
+        unlabeled_model = model.vae_model()
+        super().__init__(unlabeled_model, loss, preprocessor, train_metrics=train_metrics, valid_metrics=valid_metrics,
+                         test_metrics=test_metrics)
 
-        for batch in validation_set:
-            ops, adj = self.process_batch(batch)
-            self.eval_validation_batch(model, (ops, adj))
+        self.labeled_model = model
+        self.labeled_loss = _init_loss(labeled_loss)
+        self.labeled_metrics = {
+            'train': labeled_train_metrics, 'val': labeled_valid_metrics, 'test': labeled_test_metrics
+        }
 
-        val_metrics = self.unlabeled_metrics.epoch_end()
-        self.logger.log_epoch_metric(f"{val_name}_{self.unlabeled_metrics.name}", val_metrics, epoch)
-
-    def epoch_start(self):
-        self.unlabeled_loss.epoch_start()
-
-    def epoch_end(self, epoch):
-        final_loss = self.unlabeled_loss.epoch_end()
-        self.logger.log_epoch_metric(self.unlabeled_loss.name, final_loss, epoch)
-
-
-class IOTrainer(VAETrainer):
-    def __init__(self, model, optimizer, preprocessor, loss, metrics, labeled_loss, labeled_metrics, verbose=True,
-                 device=None, clip=5, add_loss_to_metrics=True):
-
-        super().__init__(model, optimizer, preprocessor, loss, metrics, verbose=verbose, device=device, clip=clip,
-                         add_loss_to_metrics=add_loss_to_metrics)
-
-        self.labeled_loss = init_loss(labeled_loss, name='labeled_loss')
-        self.labeled_metrics = init_metrics(labeled_metrics, name='labeled_metrics')
-        if add_loss_to_metrics:
-            self.labeled_metrics.add_metric(self.labeled_loss)
-
-    def train_on_batch(self, model, batch, epoch, i_batch):
+    def _step(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
         batch, is_labeled = batch
-        if is_labeled:
-            return self.train_on_batch_labeled(model, batch, epoch, i_batch)
-        else:
-            return super().train_on_batch(model.vae_model, batch, epoch, i_batch)
 
-    def train_on_batch_labeled(self, io_model, batch, epoch, i_batch):
+        if not is_labeled:
+            loss = super()._step(batch, batch_idx, dataset_name, prog_bar=prog_bar)
+            self.log(f'{dataset_name}/unlabeled_loss', loss)
+
         ops, adj, inputs, outputs = batch
-        pred_vae, pred_io = io_model(ops, adj, inputs=inputs)
+        pred_vae, pred_io = self.model(ops, adj, inputs=inputs)
 
-        loss = self.unlabeled_loss.next_batch(pred_vae, (ops, adj))
-        labeled_loss = self.labeled_loss.next_batch(pred_io, outputs)
+        unlabeled_loss = self.loss[dataset_name](pred_vae, (ops, adj))
+        labeled_loss = self.labeled_loss[dataset_name](pred_io, outputs)
+        loss = unlabeled_loss + labeled_loss
 
-        self.logger.log_batch_metric(self.unlabeled_loss.name, loss.detach().item(), epoch, i_batch)
-        self.logger.log_batch_metric(self.labeled_loss.name, labeled_loss.detach().item(), epoch, i_batch)
+        self.log(f'{dataset_name}/loss', loss, prog_bar=prog_bar)
+        self.log(f'{dataset_name}/unlabeled_loss', unlabeled_loss)
+        self.log(f'{dataset_name}/labeled_loss', labeled_loss)
 
-        loss += labeled_loss
+        self._eval_metrics(pred_vae, (ops, adj), self.metrics[dataset_name], dataset_name)
+        self._eval_metrics(pred_io, outputs, self.labeled_metrics[dataset_name], dataset_name)
+
         return loss
 
-    def eval_validation_batch(self, model, batch):
-        ops, adj, inputs, outputs = batch
-        pred_vae, pred_io = model(ops, adj, inputs=inputs)
-        self.labeled_metrics.next_batch(pred_io, outputs)
-        self.unlabeled_metrics.next_batch(pred_vae, (ops, adj))
 
-    def eval_validation(self, model, validation_set, epoch, val_name='validation'):
-        model.eval()
-        self.unlabeled_metrics.epoch_start()
-        self.labeled_metrics.epoch_start()
-
-        for batch in validation_set:
-            batch, is_labeled = self.process_batch(batch)
-
-            if is_labeled:
-                self.eval_validation_batch(model, batch)
-            else:
-                super().eval_validation_batch(model.vae_model(), batch)
-
-        val_metrics = self.unlabeled_metrics.epoch_end()
-        labeled_val_metrics = self.labeled_metrics.epoch_end()
-
-        self.logger.log_epoch_metric(f"{val_name}_{self.unlabeled_metrics.name}", val_metrics, epoch)
-        self.logger.log_epoch_metric(f"{val_name}_{self.labeled_metrics.name}", labeled_val_metrics, epoch)
-
-    def process_batch(self, batch):
-        batch, is_labeled = batch
-
-        ops, adj = super().process_batch(batch)
-        if not is_labeled:
-            return (ops, adj), is_labeled
-
-        inputs = batch['inputs'].to(self.device) if 'inputs' in batch else None
-        outputs = batch['outputs'].to(self.device)
-
-        return (ops, adj, inputs, outputs), is_labeled
-
-    def epoch_start(self):
-        super().epoch_start()
-        self.labeled_loss.epoch_start()
-
-    def epoch_end(self, epoch):
-        super().epoch_end(epoch)
-
-        final_loss = self.labeled_loss.epoch_end()
-        self.logger.log_epoch_metric(self.labeled_loss.name, final_loss, epoch)
-
-
-def init_loss(loss, name=''):
-    loss = loss if isinstance(loss, BaseMetric) else MeanMetric(loss, name=name)
-    if not len(loss.name):
-        loss.name = name
-    return loss
-
-
-def init_metrics(metrics, name=''):
-    if isinstance(metrics, MetricList):
-        pass
-    elif isinstance(metrics, list):
-        metrics = [(m if isinstance(m, BaseMetric) else SimpleMetric(m)) for m in metrics]
-        metrics = MetricList(metrics, name=name)
-    else:
-        raise ValueError("Metrics must be either a list of BaseMetrics or MetricList.")
-
-    # set names to all metrics
-    if not len(name):
-        name = 'metrics'
-    for i, m in enumerate(metrics.metric_list):
-        if not len(m.name):
-            m.name = f"{name}_{i}"
-
-    return metrics
+def _init_loss(loss):
+    return {'train': loss, 'val': loss.copy(), 'test': loss.copy()}
