@@ -1,26 +1,42 @@
 import torch
 
-from info_nas.datasets.base import BaseIOExtractor, IOHook
+from info_nas.datasets.base import BaseIOExtractor, IOHook, BaseNetworkData
 from tqdm import tqdm
 
 
-def get_nb101_graphs(nb, preprocessor, verbose=True):
-    nb_net_data = {}
+class Nasbench101Data(BaseNetworkData):
+    def __init__(self, nb, preprocessor, verbose=True, return_accuracy=False):
+        self.nb = nb
+        self.preprocessor = preprocessor
+        self.verbose = verbose
+        self.return_accuracy = return_accuracy
 
-    if verbose:
-        print("Loading nasbench101 graphs.")
+        self.net_data = {}
 
-    for net_hash in tqdm(nb.hash_iterator(), disable=not verbose):
+    def load(self):
+        if self.verbose:
+            print("Loading nasbench101 graphs.")
 
-        data = nb.get_metrics_from_hash(net_hash)
-        ops, adj = data[0]['module_operations'], data[0]['module_adjacency']
-        ops, adj = preprocessor.parse_net(ops, adj)
-        nb_net_data[net_hash] = {'adj': adj, 'ops': ops}
+        for net_hash in tqdm(self.nb.hash_iterator(), disable=not self.verbose):
 
-    return nb_net_data
+            data = self.nb.get_metrics_from_hash(net_hash)
+            ops, adj = data[0]['module_operations'], data[0]['module_adjacency']
+            ops, adj = self.preprocessor.parse_net(ops, adj)
+
+            data = {'adj': adj, 'ops': ops}
+            if self.return_accuracy:
+                # TODO load accuracy (mean)
+                pass
+
+            self.net_data[net_hash] = data
+
+        return self.net_data
+
+    def get_data(self, net_hash):
+        return self.net_data[net_hash]
 
 
-class NasbenchIOExtractor(BaseIOExtractor):
+class Nasbench101Extractor(BaseIOExtractor):
     def __init__(self, save_weights=True, layer_num=-1):
         self.save_weights = save_weights
         self.layer_num = layer_num
