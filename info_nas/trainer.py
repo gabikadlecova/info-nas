@@ -36,9 +36,16 @@ class NetworkVAE(pl.LightningModule):
         return loss
 
     def _eval_metrics(self, pred, true, metrics, prefix):
+        def eval_log(name, m):
+            res = m(pred, true)
+            self.log(f"{prefix}/{name}", res)
+
         for m_name, metric in metrics.items():
-            res = metric(pred, true)
-            self.log(f"{prefix}/{m_name}", res)
+            if isinstance(metric, dict):
+                for k, v in metric.items():
+                    eval_log(f"{m_name}_{k}", v)
+            else:
+                eval_log(m_name, metric)
 
     def _process_batch(self, batch):
         ops, adj = batch['ops'], batch['adj']

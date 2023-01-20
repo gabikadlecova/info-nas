@@ -31,11 +31,10 @@ class VAELoss:
 class ReconstructionMetrics(Metric):
     def __init__(self, preprocessor):
         super().__init__()
-        self.add_state("ops_acc", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("adj_recall", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("adj_fp", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("adj_acc", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("ops_acc", default=torch.tensor(0), dist_reduce_fx="mean")
+        self.add_state("adj_recall", default=torch.tensor(0), dist_reduce_fx="mean")
+        self.add_state("adj_fp", default=torch.tensor(0), dist_reduce_fx="mean")
+        self.add_state("adj_acc", default=torch.tensor(0), dist_reduce_fx="mean")
 
         self.preprocessor = preprocessor
 
@@ -52,10 +51,7 @@ class ReconstructionMetrics(Metric):
         self.total += 1
 
     def compute(self):
-        all_metrics = {
-            'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc
-        }
-        return {name: m.float() / self.total for name, m in all_metrics.items()}
+        return {'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc}
 
 
 def _get_adj_ops(preds, target, prepro):
@@ -74,37 +70,21 @@ def _get_triangle_div(adj):
 
 # TODO cite that it's from arch2vec
 class ValidityUniqueness(Metric):
-    def __init__(self, preprocessor):
+    def __init__(self, preprocessor, model, validity_func, n_latent_points=10000):
         super().__init__()
-        self.add_state("validity", default=torch.tensor(0), dist_reduce_fx="sum")
-        self.add_state("uniqueness", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("mu_list", default=[], dist_reduce_fx=None)
 
         self.preprocessor = preprocessor
+        self.model = model
+        self.n_latent_points = n_latent_points
+        self.validity_func = validity_func
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         mu = preds[2]
         self.mu_list.append(mu.detach().cpu())
-        # TODO avg and var from a stream
 
     def compute(self):
-        pass
-
-
-class ValidityUniquenessMetric(LatentVectorMetric):
-    def __init__(self, model, validity_func, prepro: Arch2vecPreprocessor, name='validity_uniqueness',
-                 n_latent_points=10000, device=None):
-        super().__init__(name=name)
-        self.model = model
-        self.prepro = prepro
-
-        self.n_latent_points = n_latent_points
-        self.device = device
-        self.validity_func = validity_func
-
-    def epoch_end(self):
-        return self.compute_validity_uniqueness()
-
-    def compute_validity_uniqueness(self):
+        # TODO compute stream avg and var if too much mem
         z_vec = torch.cat(self.mu_list, dim=0)
         z_mean, z_std = z_vec.mean(0), z_vec.std(0)
 
@@ -114,7 +94,7 @@ class ValidityUniquenessMetric(LatentVectorMetric):
         # try to generate from the latent space, measure uniqueness and validity
         self.model.eval()
         for _ in range(self.n_latent_points):
-            z = torch.randn_like(z_mean).to(self.device)
+            z = torch.randn_like(z_mean)
             z = z * z_std + z_mean
             ops, adj = self.model.decoder(z.unsqueeze(0))
 
