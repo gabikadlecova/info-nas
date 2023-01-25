@@ -1,19 +1,15 @@
-import torch
-from torch import nn
-
-from info_nas.logging.base import BaseLogger
-from info_nas.metrics.base import BaseMetric, MeanMetric, MetricList, SimpleMetric
-
 import pytorch_lightning as pl
 
 
 class NetworkVAE(pl.LightningModule):
-    def __init__(self, model, loss, preprocessor, train_metrics=None, valid_metrics=None, test_metrics=None):
+    def __init__(self, model, loss, preprocessor, train_metrics=None, valid_metrics=None, test_metrics=None,
+                 checkpoint_func=None):
         super().__init__()
         self.model = model
         self.loss = _init_loss(loss)
         self.metrics = {'train': train_metrics, 'val': valid_metrics, 'test': test_metrics}
         self.preprocessor = preprocessor
+        self.checkpoint_func = checkpoint_func
 
     def training_step(self, batch, batch_idx):
         return self._step(batch, batch_idx, 'train', prog_bar=True)

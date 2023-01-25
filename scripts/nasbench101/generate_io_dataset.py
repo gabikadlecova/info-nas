@@ -4,7 +4,7 @@ import pandas as pd
 import torch
 
 from info_nas.datasets.io_dataset import create_io_data
-from info_nas.datasets.search_spaces import NasbenchIOExtractor
+from info_nas.datasets.search_spaces import Nasbench101Extractor
 
 from nasbench_pytorch.datasets.cifar10 import prepare_dataset
 
@@ -51,7 +51,7 @@ def main(save_path, dataset_dir, nasbench, dataset_name, root, batch_size, rando
     cifar = load_cifar10(key, batch_size, num_workers, root, random_state)
 
     # extract IO data
-    nb_ex = NasbenchIOExtractor()
+    nb_ex = Nasbench101Extractor()
     io_data = create_io_data(enumerate_trained_networks(pnb, dir_path=dataset_dir, device=device), nb_ex, cifar[key])
 
     torch.save(io_data, save_path)

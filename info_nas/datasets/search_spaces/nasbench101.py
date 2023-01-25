@@ -5,11 +5,14 @@ from tqdm import tqdm
 
 
 class Nasbench101Data(BaseNetworkData):
-    def __init__(self, nb, preprocessor, verbose=True, return_accuracy=False):
+    def __init__(self, nb, preprocessor, verbose=True, return_accuracy=False, acc_epoch=108,
+                 acc_key='final_validation_accuracy'):
         self.nb = nb
         self.preprocessor = preprocessor
         self.verbose = verbose
         self.return_accuracy = return_accuracy
+        self.acc_epoch = acc_epoch
+        self.acc_key = acc_key
 
         self.net_data = {}
 
@@ -23,12 +26,12 @@ class Nasbench101Data(BaseNetworkData):
             ops, adj = data[0]['module_operations'], data[0]['module_adjacency']
             ops, adj = self.preprocessor.parse_net(ops, adj)
 
-            data = {'adj': adj, 'ops': ops}
+            res = {'adj': adj, 'ops': ops}
             if self.return_accuracy:
-                # TODO load accuracy (mean)
-                pass
+                acc_data = data[1][self.acc_epoch]
+                res[self.acc_key] = [a[self.acc_key] for a in acc_data]
 
-            self.net_data[net_hash] = data
+            self.net_data[net_hash] = res
 
         return self.net_data
 
