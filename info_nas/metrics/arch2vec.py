@@ -70,14 +70,14 @@ def _get_triangle_div(adj):
 
 # TODO cite that it's from arch2vec
 class ValidityUniqueness(Metric):
-    def __init__(self, preprocessor, model, validity_func, n_latent_points=10000):
+    def __init__(self, preprocessor, model, validity_func=None, n_latent_points=10000):
         super().__init__()
         self.add_state("mu_list", default=[], dist_reduce_fx=None)
 
         self.preprocessor = preprocessor
         self.model = model
         self.n_latent_points = n_latent_points
-        self.validity_func = validity_func
+        self.validity_func = validity_func if validity_func is not None else ValidityNasbench101
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         mu = preds[2]

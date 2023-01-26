@@ -1,4 +1,5 @@
 import pytorch_lightning as pl
+import torch
 
 
 class NetworkVAE(pl.LightningModule):
@@ -34,20 +35,24 @@ class NetworkVAE(pl.LightningModule):
     def _eval_metrics(self, pred, true, metrics, prefix):
         def eval_log(name, m):
             res = m(pred, true)
-            self.log(f"{prefix}/{name}", res)
+            if isinstance(res, dict):
+                for k, v in res.items():
+                    self.log(f"{prefix}/{m_name}_{k}", v)
+            else:
+                self.log(f"{prefix}/{name}", res)
 
         for m_name, metric in metrics.items():
-            if isinstance(metric, dict):
-                for k, v in metric.items():
-                    eval_log(f"{m_name}_{k}", v)
-            else:
-                eval_log(m_name, metric)
+            eval_log(m_name, metric)
 
     def _process_batch(self, batch):
         ops, adj = batch['ops'], batch['adj']
         ops, adj = self.preprocessor.preprocess(ops, adj)
 
         return ops, adj
+
+    def configure_optimizers(self):
+        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, betas=[0.9, 0.999], eps=1e-08)
+        return optimizer
 
 
 class InfoNAS(NetworkVAE):

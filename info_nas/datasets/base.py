@@ -1,5 +1,4 @@
 from abc import abstractmethod
-from typing import List
 
 import torch
 import pytorch_lightning as pl
@@ -106,7 +105,6 @@ class NetworkDataModule(pl.LightningDataModule):
             self.train_hash_list, res = random_split(self.train_hash_list, [train_size, size], generator=seed)
         else:
             self.train_hash_list, res = random_split(self.train_hash_list, [train_size, size])
-
 
 
 class NetworkDataset(torch.utils.data.Dataset):
