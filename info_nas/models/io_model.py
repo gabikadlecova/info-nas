@@ -1,47 +1,67 @@
 import torch
 import torch.nn as nn
-from abc import abstractmethod
 
-from info_nas.models.base import ExtendedVAEModel
+from info_nas.models.utils import save_locals
 from info_nas.models.layers import ConvBnRelu, LatentNodesFlatten, get_conv_list, get_dense_list
 
 
-class IOModel(ExtendedVAEModel):
+def get_activation(activation):
+    if activation is None or activation.lower() == 'linear':
+        return None
+    elif activation.lower() == 'sigmoid':
+        return nn.Sigmoid()
+    else:
+        raise ValueError("Unsupported activation")
+
+
+class DensePredConvModel(nn.Module):
     """
-    A model that processes architecture data (using a VAE) as well as IO data (using the VAE encoder and a regressor).
+    An IO model where the network and image vector representations are concatenated and then passed through dense
+    layers.
     """
-    def __init__(self, vae_model, activation=None):
-        super().__init__(vae_model)
-        self.model_kwargs = {'activation': activation}
+    def __init__(self, input_channels, output_channels, start_channels=128, activation=None, z_hidden=16, latent_dim=16,
+                 n_steps=2, n_convs=2, n_dense=1, dense_size=512, dropout=None):
+        super().__init__()
+        self.model_kwargs = save_locals(locals())
 
-        if activation is None or activation.lower() == 'linear':
-            self.activation = None
-        elif activation.lower() == 'sigmoid':
-            self.activation = nn.Sigmoid()
-        else:
-            raise ValueError("Unsupported activation")
+        self.activation = get_activation(activation)
+        # process images
+        self.first_conv = ConvBnRelu(input_channels, start_channels, kernel_size=3, padding=1)
+        self.conv_list, channels = get_conv_list(n_steps, n_convs, start_channels)
 
-    @abstractmethod
-    def extended_forward(self, z, **kwargs):
-        pass
+        # process network data
+        self.process_z = LatentNodesFlatten(latent_dim, z_hidden=z_hidden)
+        self.concat_dense = nn.Linear(z_hidden + channels, dense_size)
+
+        # process concatenated data
+        self.dense_list = get_dense_list(n_dense, dropout, dense_size, output_channels)
+
+    def forward(self, z, inputs=None):
+        x = self.first_conv(inputs)
+        x = self.conv_list(x)
+        x = torch.mean(x, (2, 3))
+
+        z = self.process_z(z)
+        z = torch.cat([z, x], dim=1)
+        z = self.concat_dense(z)
+
+        z = self.dense_list(z)
+        return self.activation(z) if self.activation is not None else z
 
 
-class ConcatConvModel(IOModel):
+class ConcatConvModel(nn.Module):
     """
     An IO model where the network representation is concatenated to the network along the channel axis (repeated across
     spatial dimensions).
     """
-    def __init__(self, vae_model, input_channels, output_channels, start_channels=128, z_hidden=16,
+    def __init__(self, input_channels, output_channels, start_channels=128, z_hidden=16, latent_dim=16,
                  n_steps=2, n_convs=2, dense_output=True, activation=None,
                  use_3x3_for_z=False, use_3x3_for_output=False):
-        model_kwargs = locals()
-        model_kwargs.pop('self')
-        model_kwargs.pop('vae_model')
+        super().__init__()
+        self.model_kwargs = save_locals(locals())
 
-        super().__init__(vae_model, activation=activation)
-        self.model_kwargs = model_kwargs
-
-        self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
+        self.activation = get_activation(activation)
+        self.process_z = LatentNodesFlatten(latent_dim, z_hidden=z_hidden)
 
         channels = start_channels
 
@@ -63,7 +83,7 @@ class ConcatConvModel(IOModel):
             else:
                 self.last_layer = nn.Conv2d(channels, output_channels, 1, padding=0)
 
-    def extended_forward(self, z, inputs=None):
+    def forward(self, z, inputs=None):
         # process 2D latent features to a vector
         z = self.process_z(z)
 
@@ -78,44 +98,6 @@ class ConcatConvModel(IOModel):
             z = torch.mean(z, (2, 3))
 
         z = self.last_layer(z)
-        return self.activation(z) if self.activation is not None else z
-
-
-class DensePredConvModel(IOModel):
-    """
-    An IO model where the network and image vector representations are concatenated and then passed through dense
-    layers.
-    """
-    def __init__(self, vae_model, input_channels, output_channels, start_channels=128, activation=None, z_hidden=16,
-                 n_steps=2, n_convs=2, n_dense=1, dense_size=512, dropout=None):
-        model_kwargs = locals()
-        model_kwargs.pop('self')
-        model_kwargs.pop('vae_model')
-
-        super().__init__(vae_model, activation=activation)
-        self.model_kwargs = model_kwargs
-
-        # process images
-        self.first_conv = ConvBnRelu(input_channels, start_channels, kernel_size=3, padding=1)
-        self.conv_list, channels = get_conv_list(n_steps, n_convs, start_channels)
-
-        # process network data
-        self.process_z = LatentNodesFlatten(self.vae_model.latent_dim, z_hidden=z_hidden)
-        self.concat_dense = nn.Linear(z_hidden + channels, dense_size)
-
-        # process concatenated data
-        self.dense_list = get_dense_list(n_dense, dropout, dense_size, output_channels)
-
-    def extended_forward(self, z, inputs=None):
-        x = self.first_conv(inputs)
-        x = self.conv_list(x)
-        x = torch.mean(x, (2, 3))
-
-        z = self.process_z(z)
-        z = torch.cat([z, x], dim=1)
-        z = self.concat_dense(z)
-
-        z = self.dense_list(z)
         return self.activation(z) if self.activation is not None else z
 
 

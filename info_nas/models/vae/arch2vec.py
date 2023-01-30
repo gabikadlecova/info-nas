@@ -3,7 +3,7 @@ import torch
 from torch import nn
 from arch2vec.models.model import Model
 
-from info_nas.models.utils import save_model_data
+from info_nas.models.utils import save_locals
 
 
 class Arch2vecPreprocessor:
@@ -50,25 +50,20 @@ def convert_to_nasbench101(ops, adj):
 
 
 class Arch2vecModel(nn.Module):
-    def __init__(self, input_dim=5, hidden_dim=128, latent_dim=16, num_layers=5, num_mlps=2, dropout=0.3,
+    def __init__(self, input_dim=5, hidden_dim=128, latent_dim=16, num_hops=5, num_mlp_layers=2, dropout=0.3,
                  activation_adj=torch.sigmoid, activation_ops=torch.softmax, adj_hidden_dim=128, ops_hidden_dim=128):
         super().__init__()
+        self.model_kwargs = save_locals(locals())
 
-        self.model_kwargs = {
-            'input_dim': input_dim, 'hidden_dim': hidden_dim, 'latent_dim': latent_dim, 'num_hops': num_layers,
-            'num_mlp_layers': num_mlps, 'dropout': dropout, 'activation_adj': activation_adj,
-            'activation_ops': activation_ops, 'adj_hidden_dim': adj_hidden_dim, 'ops_hidden_dim': ops_hidden_dim,
-            'return_z': True
-        }
-
-        self.model = Model(**self.model_kwargs)
+        self.model = Model(**self.model_kwargs, return_z=True)
 
     def forward(self, ops, adj, return_z=False):
         out = self.model.forward(ops, adj)
         return out[:-1] if not return_z else (out[:-1], out[-1])
 
-    def save_model_data(self, data=None, save_state_dict=True):
-        return save_model_data(self, kwargs=self.model_kwargs, data=data, save_state_dict=save_state_dict)
+    @property
+    def decoder(self):
+        return self.model.decoder
 
     @property
     def latent_dim(self):

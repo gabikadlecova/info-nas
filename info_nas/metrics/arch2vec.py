@@ -5,11 +5,10 @@ import torch
 from torch import nn
 from torchmetrics import Metric
 
-from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
 
-
-class VAELoss:
+class VAELoss(nn.Module):
     def __init__(self, adj_loss=None, ops_loss=None, w_ops=1.0, w_adj=1.0):
+        super().__init__()
         self.adj_loss = nn.BCELoss() if adj_loss is None else adj_loss
         self.ops_loss = nn.BCELoss() if ops_loss is None else ops_loss
         self.w_ops = w_ops
@@ -29,33 +28,58 @@ class VAELoss:
 
 
 class ReconstructionMetrics(Metric):
-    def __init__(self, preprocessor):
+    def __init__(self, preprocessor, adj_threshold=0.5):
         super().__init__()
-        self.add_state("ops_acc", default=torch.tensor(0), dist_reduce_fx="mean")
-        self.add_state("adj_recall", default=torch.tensor(0), dist_reduce_fx="mean")
-        self.add_state("adj_fp", default=torch.tensor(0), dist_reduce_fx="mean")
-        self.add_state("adj_acc", default=torch.tensor(0), dist_reduce_fx="mean")
+        self.add_state("ops_acc", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("adj_recall", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("adj_fp", default=torch.tensor(0.0), dist_reduce_fx="sum")
+        self.add_state("adj_acc", default=torch.tensor(0.0), dist_reduce_fx="sum")
 
         self.preprocessor = preprocessor
+        self.threshold = adj_threshold
+
+        self.add_state("batch_size", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
+        self.add_state("total_uneven", default=torch.tensor(0), dist_reduce_fx="sum")
+
+    def _get_metrics(self):
+        return {'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc}
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         ops, adj, ops_recon, adj_recon = _get_adj_ops(preds, target, self.preprocessor)
         adj_recon_thre = adj_recon > self.threshold
         triangle_div = _get_triangle_div(adj)
 
-        self.ops_acc += ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item()
-        self.adj_recall += adj_recon[adj.type(torch.bool)].sum().item() / adj.sum().item()
-        self.adj_fp += (adj_recon[(~adj.type(torch.bool)).triu(1)].sum() / (triangle_div - adj.sum())).item()
-        self.adj_acc += adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div
+        # set batch size
+        batch_size = len(ops)
+        if self.batch_size == 0:
+            self.batch_size += batch_size
 
-        self.total += 1
+        # compute batch metrics
+        batch = {
+            'ops_acc': ops_recon.argmax(dim=-1).eq(ops.argmax(dim=-1)).float().mean().item(),
+            'adj_recall': adj_recon[adj.type(torch.bool)].sum().item() / adj.sum().item(),
+            'adj_fp': (adj_recon[(~adj.type(torch.bool)).triu(1)].sum() / (triangle_div - adj.sum())).item(),
+            'adj_acc': adj_recon_thre.eq(adj.type(torch.bool)).float().triu(1).sum().item() / triangle_div
+        }
+
+        for key, metric in self._get_metrics().items():
+            batch_m = batch[key]
+            metric += batch_m * batch_size
+
+        # update totals
+        if batch_size == self.batch_size:
+            self.total += 1
+        else:
+            self.total_uneven += batch_size
 
     def compute(self):
-        return {'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc}
+        total = self.total * self.batch_size + self.total_uneven
+        return {k: m / total for k, m in self._get_metrics().items()}
 
 
 def _get_adj_ops(preds, target, prepro):
-    ops_recon, adj_recon, _, _, _ = preds
+    ops_recon, adj_recon, _, _ = preds
     ops, adj = target
 
     ops_recon, adj_recon = prepro.process_reverse(ops_recon, adj_recon)
@@ -70,14 +94,14 @@ def _get_triangle_div(adj):
 
 # TODO cite that it's from arch2vec
 class ValidityUniqueness(Metric):
-    def __init__(self, preprocessor, model, validity_func=None, n_latent_points=10000):
+    def __init__(self, preprocessor, model, validity_func, n_latent_points=10000):
         super().__init__()
         self.add_state("mu_list", default=[], dist_reduce_fx=None)
 
         self.preprocessor = preprocessor
         self.model = model
         self.n_latent_points = n_latent_points
-        self.validity_func = validity_func if validity_func is not None else ValidityNasbench101
+        self.validity_func = validity_func
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         mu = preds[2]
@@ -102,7 +126,7 @@ class ValidityUniqueness(Metric):
             ops = ops.squeeze(0).detach().cpu()
             adj = adj.squeeze(0).detach().cpu()
             max_idx = torch.argmax(ops, dim=-1)
-            ops_decode, adj_decode = self.prepro.convert_back(max_idx, adj)
+            ops_decode, adj_decode = self.preprocessor.convert_back(max_idx, adj)
 
             is_valid = self.validity_func(ops_decode, adj_decode)
 
@@ -126,7 +150,7 @@ class ValidityUniqueness(Metric):
 
 
 class ValidityNasbench101:
-    def __init___(self, nasbench):
+    def __init__(self, nasbench):
         self.nasbench = nasbench
 
     def __call__(self, ops, adj):

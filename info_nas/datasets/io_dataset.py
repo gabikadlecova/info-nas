@@ -1,9 +1,8 @@
-import pickle
-
+import torch
 import torch.utils.data
 
 from info_nas.datasets.base import BaseIOExtractor, NetworkDataset, NetworkDataModule, BaseNetworkData
-from typing import Dict, List
+from typing import Dict
 
 
 def create_io_data(networks: Dict[str, torch.nn.Module], extractor: BaseIOExtractor, dataset,
@@ -30,8 +29,7 @@ class IOData:
         self.load_path = load_path
 
     def load(self):
-        with open(self.load_path, 'rb') as f:
-            self.data = pickle.load(self.load_path)
+        self.data = torch.load(self.load_path)
 
     def get_data(self, net_hash):
         return self.data['networks'][net_hash]
@@ -43,7 +41,7 @@ class IOData:
 class IODataModule(NetworkDataModule):
     def __init__(self, network_data: BaseNetworkData, io_data, dataset_class=None,
                  label_transform=None, **kwargs):
-        self.dataset_class = dataset_class if dataset_class is not None else IODataset
+        dataset_class = dataset_class if dataset_class is not None else IODataset
         super().__init__(network_data, dataset_class=dataset_class, **kwargs)
 
         self.label_transform = label_transform
@@ -76,7 +74,7 @@ class IODataset(NetworkDataset):
         # create a map from dataset idx to network output idx
         self.map_idx = []
         for net_hash in hash_list:
-            vals = io_data['networks'][net_hash]
+            vals = io_data.get_data(net_hash)
             for i, _ in enumerate(vals['outputs']):
                 self.map_idx.append((net_hash, i))
 

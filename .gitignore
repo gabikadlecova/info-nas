@@ -8,6 +8,7 @@ data/*
 
 */checkpoints/*
 *.pt
+lightning_logs
 
 # C extensions
 *.so

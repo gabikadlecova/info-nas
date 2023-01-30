@@ -15,7 +15,7 @@ def _get_weights(item):
     # include bias if included in outputs
     include_bias = item['include_bias'] if 'include_bias' in item else False
     if include_bias:
-        return torch.cat([item['weights'], item['bias'].unsqueeze(-1)], dim=1)
+        return torch.cat([item['weights'], item['biases'].unsqueeze(-1)], dim=1)
     else:
         return item['weights']
 
@@ -25,7 +25,7 @@ class MultiplyByWeights:
         output = item['outputs']
         weights = _get_weights(item)
 
-        output *= weights
+        output = output.unsqueeze(0) * weights
         item['outputs'] = weights
 
         return item
@@ -57,6 +57,7 @@ class SortByWeights:
         if not self.use_all_labels:
             # sort by target label or one chosen
             weights = weights[label] if self.fixed_label is None else weights[self.fixed_label]
+            output = output[label] if self.fixed_label is None else output[self.fixed_label]
 
             weights, indices = torch.sort(weights, descending=True)
             output = output[indices].detach()
