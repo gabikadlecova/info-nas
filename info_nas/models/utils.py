@@ -49,3 +49,10 @@ def load_model_from_data(data):
     model = import_and_init_model(name, package, kwargs, state_dict=state_dict)
 
     return model
+
+
+def load_nested_state_dict(model, model_name, data):
+    state_d = {
+        '.'.join(w.split('.')[1:]): val for w, val in data['state_dict'].items() if w.startswith(f'{model_name}.')
+    }
+    model.load_state_dict(state_d)

@@ -19,12 +19,10 @@ class NetworkVAE(pl.LightningModule):
         _save_model(dir_path, self.model, 'model')
 
     def training_step(self, batch, batch_idx):
-        return None
-        #return self._step(batch, batch_idx, 'train', prog_bar=True)
+        return self._step(batch, batch_idx, 'train', prog_bar=True)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
-        return None
-        #return self._step(batch, batch_idx, 'val', dataloader_idx=dataloader_idx)
+        return self._step(batch, batch_idx, 'val', dataloader_idx=dataloader_idx)
 
     def test_step(self, batch, batch_idx, dataloader_idx=None):
         return self._step(batch, batch_idx, 'test', dataloader_idx=dataloader_idx)
