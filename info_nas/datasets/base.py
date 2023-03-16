@@ -1,8 +1,10 @@
 from abc import abstractmethod
 
+import pandas as pd
 import torch
 import pytorch_lightning as pl
-from torch.utils.data import DataLoader, random_split
+from pytorch_lightning.utilities.combined_loader import CombinedLoader
+from torch.utils.data import DataLoader
 
 
 class BaseIOExtractor:
@@ -43,81 +45,69 @@ def split_unlabeled_labeled(all_keys, labeled_keys):
     return unlabeled_keys, labeled_keys
 
 
+def datasets_to_iterable(data):
+    if isinstance(data, dict) or isinstance(data, list):
+        return data
+    return [data]
+
+
+def apply_to_vals(dataset, func):
+    if isinstance(dataset, dict):
+        return {k: func(v) for k, v in dataset.items()}
+    return [func(v) for v in dataset]
+
+
 class NetworkDataModule(pl.LightningDataModule):
-    def __init__(self, network_data: BaseNetworkData, transform=None, batch_size=32, dataset_class=None,
-                 train_hash_list=None, val_hash_list=None, test_hash_list=None, use_val=True, use_test=False, seed=None,
-                 val_size=0.1, test_size=0.1):
+    def __init__(self, network_data: BaseNetworkData, train_datasets, val_datasets=None, test_datasets=None,
+                 batch_size=32):
         super().__init__()
-        self.dataset_class = dataset_class if dataset_class is not None else NetworkDataset
 
         self.network_data = network_data
-        self.transform = transform
         self.batch_size = batch_size
 
-        self.seed = seed
-
-        assert train_hash_list is not None or val_hash_list is not None or test_hash_list is not None
-        self.train_hash_list = train_hash_list
-        self.val_hash_list, self.test_hash_list = None, None
-        self.train_set, self.val_set, self.test_set = None, None, None
-
-        if use_val:
-            self.val_hash_list = self._split_off_hashes(hashes=val_hash_list, size=val_size, seed=seed)
-        if use_test:
-            self.test_hash_list = self._split_off_hashes(hashes=test_hash_list, size=test_size, seed=seed)
+        self.data = {'train': datasets_to_iterable(train_datasets)}
+        if val_datasets is not None:
+            self.data['val'] = datasets_to_iterable(val_datasets)
+        if test_datasets is not None:
+            self.data['test'] = datasets_to_iterable(test_datasets)
 
     def prepare_data(self):
-        self.network_data.load()
-
-    def setup(self, stage: str):
-        if self.train_hash_list is not None:
-            self.train_set = self.dataset_class(self.train_hash_list, self.network_data, transform=self.transform)
-
-        if self.val_hash_list is not None:
-            self.val_set = self.dataset_class(self.val_hash_list, self.network_data, transform=self.transform)
-
-        if self.test_hash_list is not None:
-            self.test_set = self.dataset_class(self.test_hash_list, self.network_data, transform=self.transform)
+        for datasets in self.data.values():
+            apply_to_vals(datasets, lambda d: d.load())
 
     def train_dataloader(self):
-        return DataLoader(self.train_set, batch_size=self.batch_size, shuffle=True)
+        loaders = self._get_loaders('train')
+        return CombinedLoader(loaders, mode='max_size_cycle')
 
     def val_dataloader(self):
-        return [DataLoader(self.val_set, batch_size=self.batch_size, shuffle=False)]
+        return self._get_loaders('val')
 
     def test_dataloader(self):
-        return DataLoader(self.test_set, batch_size=self.batch_size, shuffle=False)
+        return self._get_loaders('test')
 
-    def _split_off_hashes(self, hashes=None, size=None, seed=None):
-        if self.train_hash_list is None:
-            return hashes
-
-        # predetermined split
-        if hashes is not None:
-            hash_set = set(hashes)
-            self.train_hash_list = [h for h in self.train_hash_list if h not in hash_set]
-            return hashes
-
-        # random split
-        train_size = (1.0 - size) if size < 1.0 else (len(self.train_hash_list) - size)
-        if seed is not None:
-            seed = torch.Generator().manual_seed(seed) if seed is not None else None
-            self.train_hash_list, res = random_split(self.train_hash_list, [train_size, size], generator=seed)
-        else:
-            self.train_hash_list, res = random_split(self.train_hash_list, [train_size, size])
+    def _get_loaders(self, key):
+        shuffle = True if key == 'train' else False
+        return apply_to_vals(self.data[key], lambda d: DataLoader(d, batch_size=self.batch_size, shuffle=shuffle))
 
 
 class NetworkDataset(torch.utils.data.Dataset):
-    def __init__(self, hash_list, network_data: BaseNetworkData, transform=None):
-        self.hash_list = hash_list
+    def __init__(self, net_hashes, network_data: BaseNetworkData, transform=None):
+        self.net_hashes = net_hashes
         self.network_data = network_data
         self.transform = transform
 
+    def load(self):
+        if isinstance(self.net_hashes, str):
+            data = pd.read_csv(self.net_hashes)
+            self.net_hashes = data['hashes']
+
+        self.network_data.load()
+
     def __len__(self):
-        return len(self.hash_list)
+        return len(self.net_hashes)
 
     def __getitem__(self, index):
-        data = self.network_data.get_data(self.hash_list[index])
+        data = self.network_data.get_data(self.net_hashes[index])
         if self.transform is not None:
             data = self.transform(data)
 

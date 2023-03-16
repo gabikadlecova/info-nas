@@ -29,7 +29,8 @@ class IOData:
         self.load_path = load_path
 
     def load(self):
-        self.data = torch.load(self.load_path)
+        if self.data is None:
+            self.data = torch.load(self.load_path)
 
     def get_data(self, net_hash):
         return self.data['networks'][net_hash]
@@ -38,43 +39,24 @@ class IOData:
         return self.data['images'][inputs]
 
 
-class IODataModule(NetworkDataModule):
-    def __init__(self, network_data: BaseNetworkData, io_data, dataset_class=None,
-                 label_transform=None, **kwargs):
-        dataset_class = dataset_class if dataset_class is not None else IODataset
-        super().__init__(network_data, dataset_class=dataset_class, **kwargs)
-
-        self.label_transform = label_transform
-        self.io_data = io_data
-
-    def prepare_data(self):
-        super().prepare_data()
-        if self.io_data is not self.network_data:
-            self.io_data.load()
-
-    def setup(self, stage: str):
-        if self.train_hash_list is not None:
-            self.train_set = self.dataset_class(self.train_hash_list, self.network_data, self.io_data,
-                                                transform=self.transform, label_transform=self.label_transform)
-
-        if self.val_hash_list is not None:
-            self.val_set = self.dataset_class(self.val_hash_list, self.network_data, self.io_data,
-                                              transform=self.transform, label_transform=self.label_transform)
-        if self.test_hash_list is not None:
-            self.test_set = self.dataset_class(self.test_hash_list, self.network_data, self.io_data,
-                                               transform=self.transform, label_transform=self.label_transform)
-
-
 class IODataset(NetworkDataset):
-    def __init__(self, hash_list, network_data, io_data, transform=None, label_transform=None):
-        super().__init__(hash_list, network_data, transform=transform)
+    def __init__(self, net_hashes, network_data, io_data, transform=None, label_transform=None):
+        super().__init__(net_hashes, network_data, transform=transform)
         self.io_data = io_data
         self.label_transform = label_transform
+        self.map_idx = None
+
+    def load(self):
+        super().load()
+        self.io_data.load()
+
+        if self.map_idx is not None:
+            return
 
         # create a map from dataset idx to network output idx
         self.map_idx = []
-        for net_hash in hash_list:
-            vals = io_data.get_data(net_hash)
+        for net_hash in self.net_hashes:
+            vals = self.io_data.get_data(net_hash)
             for i, _ in enumerate(vals['outputs']):
                 self.map_idx.append((net_hash, i))
 

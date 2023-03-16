@@ -7,6 +7,10 @@ import torch
 from info_nas.models.utils import save_model_data
 
 
+def get_adam(params):
+    return torch.optim.Adam(params, lr=1e-3, betas=(0.9, 0.999), eps=1e-08)
+
+
 class NetworkVAE(pl.LightningModule):
     def __init__(self, model, loss, preprocessor, train_metrics=None, valid_metrics=None, test_metrics=None):
         super().__init__()
@@ -19,22 +23,26 @@ class NetworkVAE(pl.LightningModule):
         _save_model(dir_path, self.model, 'model')
 
     def training_step(self, batch, batch_idx):
-        return self._step(batch, batch_idx, 'train', prog_bar=True)
+        return self.compute_loss(batch, batch_idx, 'train', prog_bar=True)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
-        return self._step(batch, batch_idx, 'val', dataloader_idx=dataloader_idx)
+        return self.compute_loss(batch, batch_idx, 'val', dataloader_idx=dataloader_idx, prog_bar=True)
 
     def test_step(self, batch, batch_idx, dataloader_idx=None):
-        return self._step(batch, batch_idx, 'test', dataloader_idx=dataloader_idx)
+        return self.compute_loss(batch, batch_idx, 'test', dataloader_idx=dataloader_idx, prog_bar=True)
 
-    def _step(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
+    def get_dataset_name(self, dataset_name, dataloader_idx=None):
+        return dataset_name if dataloader_idx is None else f"{dataset_name}_{dataloader_idx}"
+
+    def compute_loss(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
         ops, adj = self._process_batch(batch)
 
         pred = self.model(ops, adj)
         loss = self.loss[dataset_name](pred, (ops, adj))
 
-        self.log(f'{dataset_name}/loss', loss, prog_bar=prog_bar)
-        self._eval_metrics(pred, (ops, adj), self.metrics[dataset_name], dataset_name)
+        log_name = self.get_dataset_name(dataset_name, dataloader_idx=dataloader_idx)
+        self.log(f'{log_name}/loss', loss, prog_bar=prog_bar)
+        self._eval_metrics(pred, (ops, adj), self.metrics[dataset_name], log_name)
 
         return loss
 
@@ -60,8 +68,7 @@ class NetworkVAE(pl.LightningModule):
         return ops, adj
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=1e-3, betas=(0.9, 0.999), eps=1e-08)
-        return optimizer
+        return get_adam(self.parameters())
 
 
 class InfoNAS(NetworkVAE):
@@ -78,37 +85,65 @@ class InfoNAS(NetworkVAE):
             'train': labeled_train_metrics, 'val': labeled_valid_metrics, 'test': labeled_test_metrics
         }
 
+        self.automatic_optimization = False
+
+    def training_step(self, batch, batch_idx):
+        batch, labeled_batch = batch['unlabeled'], batch['labeled']
+        opt, labeled_opt = self.optimizers()
+
+        # unlabeled step
+        opt.zero_grad()
+        loss = self.compute_loss(batch, batch_idx, 'train', prog_bar=True)
+        self.log(f'train/unlabeled_loss', loss)
+        self.manual_backward(loss)
+        opt.step()
+
+        # labeled step
+        labeled_opt.zero_grad()
+        loss = self.compute_loss(labeled_batch, batch_idx, 'train', prog_bar=True)
+        self.manual_backward(loss)
+        labeled_opt.step()
+
     def save_model_args(self, dir_path):
         super().save_model_args(dir_path)
         _save_model(dir_path, self.labeled_model, 'labeled_model')
 
     def _process_batch(self, batch):
         ops, adj = super()._process_batch(batch)
+        if 'outputs' not in batch:
+            return ops, adj
 
         return ops, adj, batch['inputs'], batch['outputs']
 
-    def _step(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
-        if not self.only_labeled:
-            batch, unlabeled_batch = batch['labeled'], batch['unlabeled']
-            loss = super()._step(unlabeled_batch, batch_idx, dataset_name, prog_bar=prog_bar)
-            self.log(f'{dataset_name}/unlabeled_loss', loss)
+    def compute_loss(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
+        if 'outputs' in batch:
+            return self.compute_loss_labeled(batch, batch_idx, dataset_name, dataloader_idx=dataloader_idx,
+                                             prog_bar=prog_bar)
+        return super().compute_loss(batch, batch_idx, dataset_name, dataloader_idx=dataloader_idx, prog_bar=prog_bar)
 
+    def compute_loss_labeled(self, batch, batch_idx, dataset_name, dataloader_idx=None, prog_bar=False):
         ops, adj, inputs, outputs = self._process_batch(batch)
-        pred_vae, z = self.model(ops, adj)
+        pred_vae, z = self.model(ops, adj, return_z=True)
         pred_io = self.labeled_model(z, inputs=inputs)
 
         unlabeled_loss = self.loss[dataset_name](pred_vae, (ops, adj))
         labeled_loss = self.labeled_loss[dataset_name](pred_io, outputs)
         loss = unlabeled_loss + labeled_loss
 
-        self.log(f'{dataset_name}/loss', loss, prog_bar=prog_bar)
-        self.log(f'{dataset_name}/unlabeled_loss', unlabeled_loss)
-        self.log(f'{dataset_name}/labeled_loss', labeled_loss)
+        logname = self.get_dataset_name(dataset_name, dataloader_idx=dataloader_idx)
+        logname = f"{logname}_labeled"
+        self.log(f'{logname}/loss', loss)
+        self.log(f'{logname}/unlabeled_loss', unlabeled_loss, prog_bar=prog_bar)
+        self.log(f'{logname}/labeled_loss', labeled_loss, prog_bar=prog_bar)
 
-        self._eval_metrics(pred_vae, (ops, adj), self.metrics[dataset_name], dataset_name)
-        self._eval_metrics(pred_io, outputs, self.labeled_metrics[dataset_name], dataset_name)
+        self._eval_metrics(pred_vae, (ops, adj), self.metrics[dataset_name], logname)
+        self._eval_metrics(pred_io, outputs, self.labeled_metrics[dataset_name], logname)
 
         return loss
+
+    def configure_optimizers(self):
+        optimizer = get_adam(self.model.parameters())
+        return optimizer, get_adam(self.parameters())
 
 
 def _init_loss(loss):

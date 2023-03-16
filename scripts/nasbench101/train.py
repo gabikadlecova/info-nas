@@ -1,15 +1,15 @@
 import os.path
 
 import click
-import pandas as pd
 import pytorch_lightning as pl
 
-from info_nas.datasets.io_dataset import IODataModule, IOData
+from info_nas.datasets.base import NetworkDataModule, NetworkDataset
+from info_nas.datasets.io_dataset import IOData, IODataset
 from info_nas.datasets.search_spaces.nasbench101 import Nasbench101Data
 from info_nas.datasets.transforms import MultiplyByWeights, SortByWeights, IncludeBias
 from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
 
-from info_nas.models.io_model import DensePredConvModel, ConcatConvModel
+from info_nas.models.io_model import ConcatConvModel
 from info_nas.models.vae.arch2vec import Arch2vecModel
 
 from torch.nn import MSELoss
@@ -19,11 +19,6 @@ from searchspace_train.datasets.nasbench101 import load_nasbench
 from torchvision.transforms import Compose
 
 from info_nas.trainer import InfoNAS, save_to_trainer_path
-
-
-def load_hashes(path):
-    data = pd.read_csv(path)
-    return data['hashes']
 
 
 def get_preprocessor():
@@ -57,15 +52,19 @@ def train(base_dir, nb, train_hashes, val_hashes, io_path):
     nb = load_nasbench(nb)
     prepro = get_preprocessor()
 
-    train_hashes, val_hashes = load_hashes(train_hashes), load_hashes(val_hashes)
-
     # data
     network_data = Nasbench101Data(nb, prepro)
     io_data = IOData(load_path=io_path)
     transform = get_label_transforms()
+    nb_hashes = [h for h in nb.hash_iterator()]
 
-    dm = IODataModule(network_data, io_data, label_transform=transform,
-                      train_hash_list=train_hashes, val_hash_list=val_hashes)
+    unlabeled_train = NetworkDataset(nb_hashes, network_data)
+    labeled_train = IODataset(train_hashes, network_data, io_data, label_transform=transform)
+
+    labeled_val = IODataset(val_hashes, network_data, io_data, label_transform=transform)
+
+    dm = NetworkDataModule(network_data, {'labeled': labeled_train, 'unlabeled': unlabeled_train},
+                           val_datasets=labeled_val)
 
     # model
     vae = Arch2vecModel()

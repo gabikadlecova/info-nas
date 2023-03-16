@@ -14,9 +14,14 @@ class Nasbench101Data(BaseNetworkData):
         self.acc_epoch = acc_epoch
         self.acc_key = acc_key
 
-        self.net_data = {}
+        self.net_data = None
 
     def load(self):
+        if self.net_data is not None:
+            return self.net_data
+
+        self.net_data = {}
+
         if self.verbose:
             print("Loading nasbench101 graphs.")
 
