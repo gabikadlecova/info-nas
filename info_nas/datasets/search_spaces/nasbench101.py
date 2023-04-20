@@ -43,6 +43,9 @@ class Nasbench101Data(BaseNetworkData):
     def get_data(self, net_hash):
         return self.net_data[net_hash]
 
+    def get_hashes(self):
+        return [h for h in self.nb.hash_iterator()]
+
 
 class Nasbench101Extractor(BaseIOExtractor):
     def __init__(self, save_weights=True, layer_num=-1):

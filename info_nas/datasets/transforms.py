@@ -1,5 +1,9 @@
-import pickle
 import torch
+from torchvision.transforms import Compose
+
+
+def get_label_transforms():
+    return Compose([IncludeBias(), MultiplyByWeights(), SortByWeights()])
 
 
 class IncludeBias:

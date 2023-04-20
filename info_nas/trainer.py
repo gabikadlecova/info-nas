@@ -158,6 +158,6 @@ def _save_model(dir_path, model, model_name):
 def save_to_trainer_path(trainer: pl.Trainer, model):
     dir_path = trainer.logger.log_dir
     if not os.path.exists(dir_path):
-        os.mkdir(dir_path)
+        os.makedirs(dir_path, exist_ok=True)
 
     model.save_model_args(dir_path)

@@ -22,6 +22,10 @@ class BaseNetworkData:
     def get_data(self, net_hash):
         pass
 
+    @abstractmethod
+    def get_hashes(self):
+        pass
+
 
 class IOHook:
     def __init__(self, save_inputs=False, save_outputs=True):
