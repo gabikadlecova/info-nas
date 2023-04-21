@@ -13,7 +13,7 @@ from info_nas.models.vae.arch2vec import Arch2vecModel
 
 from searchspace_train.datasets.nasbench101 import load_nasbench
 
-from info_nas.trainer import InfoNAS, save_to_trainer_path
+from info_nas.models import InfoNAS, save_to_trainer_path
 
 
 def _base_dirs(base, *args):

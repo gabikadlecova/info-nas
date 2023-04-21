@@ -4,7 +4,7 @@ from copy import copy
 import pytorch_lightning as pl
 import torch
 
-from info_nas.models.utils import save_model_data
+from info_nas.models.utils import save_model_data, load_model_from_data
 
 
 def get_adam(params):
@@ -69,6 +69,18 @@ class NetworkVAE(pl.LightningModule):
 
     def configure_optimizers(self):
         return get_adam(self.parameters())
+
+    @staticmethod
+    def load_from_checkpoint_dir(checkpoint_dir, weights_name, cfg_func, nb, map_location=None, **kwargs):
+        unlabeled_path = torch.load(os.path.join(checkpoint_dir, 'model_args.pt'), map_location=map_location)
+        model = load_model_from_data(unlabeled_path)
+
+        cfg = cfg_func(model, nb, **kwargs)
+        vae_kwargs = ['loss', 'preprocessor', 'train_metrics', 'valid_metrics', 'test_metrics']
+        vae_kwargs = {k: cfg[k] for k in vae_kwargs}
+
+        return cfg, NetworkVAE.load_from_checkpoint(os.path.join(checkpoint_dir, 'checkpoints', weights_name),
+                                                    map_location=map_location, model=model, **vae_kwargs)
 
 
 class InfoNAS(NetworkVAE):
@@ -145,6 +157,23 @@ class InfoNAS(NetworkVAE):
         optimizer = get_adam(self.model.parameters())
         return optimizer, get_adam(self.parameters())
 
+    @staticmethod
+    def load_from_checkpoint_dir(checkpoint_dir, weights_name, cfg_func, map_location=None, **kwargs):
+        unlabeled_path = torch.load(os.path.join(checkpoint_dir, 'model_args.pt'), map_location=map_location)
+        labeled_path = torch.load(os.path.join(checkpoint_dir, 'labeled_model_args.pt'), map_location=map_location)
+
+        model, labeled_model = load_model_from_data(unlabeled_path), load_model_from_data(labeled_path)
+
+        cfg = cfg_func(model, labeled_model=labeled_model, **kwargs)
+        vae_kwargs = ['loss', 'preprocessor', 'labeled_loss', 'train_metrics',
+                      'valid_metrics', 'test_metrics', 'labeled_train_metrics', 'labeled_valid_metrics',
+                      'labeled_test_metrics']
+        vae_kwargs = {k: cfg[k] for k in vae_kwargs if k in cfg}
+
+        return cfg, InfoNAS.load_from_checkpoint(os.path.join(checkpoint_dir, 'checkpoints', weights_name),
+                                                 map_location=map_location, model=model, labeled_model=labeled_model,
+                                                 **vae_kwargs)
+
 
 def _init_loss(loss):
     return {'train': loss, 'val': copy(loss), 'test': copy(loss)}
@@ -161,3 +190,5 @@ def save_to_trainer_path(trainer: pl.Trainer, model):
         os.makedirs(dir_path, exist_ok=True)
 
     model.save_model_args(dir_path)
+
+
