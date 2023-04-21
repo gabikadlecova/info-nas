@@ -1,5 +1,8 @@
+import os.path
+
 import torch
 import torch.utils.data
+from info_nas.datasets.transforms import get_label_transforms
 
 from info_nas.datasets.base import BaseIOExtractor, NetworkDataset, NetworkDataModule, BaseNetworkData
 from typing import Dict
@@ -82,3 +85,31 @@ class IODataset(NetworkDataset):
             data = self.label_transform(data)
 
         return data
+
+
+def _join_path(p, base_dir=None):
+    return p if base_dir is None else os.path.join(base_dir, p)
+
+
+def _load_data_or_iterable(data, network_data, io_datasets, transform, base_dir=None):
+    def init_io(hashes, key):
+        return IODataset(_join_path(hashes, base_dir=base_dir), network_data, io_datasets[key],
+                         label_transform=transform)
+
+    if isinstance(data, list):
+        return [init_io(v['hashes'], v['dataset']) for v in data]
+    if isinstance(data, dict) and 'hashes' not in data:
+        return {k: init_io(v['hashes'], v['dataset']) for k, v in data.items()}
+    return init_io(data['hashes'], data['dataset'])
+
+
+def load_from_config(data_cfg, network_data, base_dir=None):
+    transform = get_label_transforms()
+    datasets = {dname: IOData(load_path=_join_path(dpath, base_dir=base_dir))
+                for dname, dpath in data_cfg['datasets'].items()}
+
+    keys = ['train', 'val', 'test']
+    res = {k: _load_data_or_iterable(data_cfg[k], network_data, datasets, transform, base_dir=base_dir)
+           for k in keys if k in data_cfg}
+
+    return res

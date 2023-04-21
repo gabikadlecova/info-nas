@@ -1,0 +1,15 @@
+{
+  "datasets": {
+    "cifar_val": "data/test_io.pt"
+  },
+  "train" : {
+    "hashes": "data/train_hashes.csv",
+    "dataset": "cifar_val"
+  },
+  "val": [
+    {
+      "hashes": "data/val_hashes.csv",
+      "dataset": "cifar_val"
+    }
+  ]
+}
