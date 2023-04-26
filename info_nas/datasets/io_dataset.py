@@ -91,6 +91,13 @@ def _join_path(p, base_dir=None):
     return p if base_dir is None else os.path.join(base_dir, p)
 
 
+def get_n_dataloaders(cfg, key):
+    if key in cfg:
+        cfg = cfg[key]
+        return 1 if isinstance(cfg, dict) and 'hashes' in cfg else len(cfg)
+    return 0
+
+
 def _load_data_or_iterable(data, network_data, io_datasets, transform, base_dir=None):
     def init_io(hashes, key):
         return IODataset(_join_path(hashes, base_dir=base_dir), network_data, io_datasets[key],

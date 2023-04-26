@@ -3,6 +3,7 @@ from copy import copy
 
 import pytorch_lightning as pl
 import torch
+from torch import nn
 
 from info_nas.models.utils import save_model_data, load_model_from_data
 
@@ -11,25 +12,67 @@ def get_adam(params):
     return torch.optim.Adam(params, lr=1e-3, betas=(0.9, 0.999), eps=1e-08)
 
 
+def _log_stepwise(m):
+    if not (hasattr(m, 'epoch_only')):
+        return None
+    return not m.epoch_only
+
+
+def _get(moduledict, key):
+    if moduledict is None:
+        return None
+
+    if key not in moduledict:
+        return None
+    return moduledict[key]
+
+
 class NetworkVAE(pl.LightningModule):
-    def __init__(self, model, loss, preprocessor, train_metrics=None, valid_metrics=None, test_metrics=None):
+    def __init__(self, model, loss, preprocessor, metrics=None):
         super().__init__()
         self.model = model
         self.loss = _init_loss(loss)
-        self.metrics = {'train': train_metrics, 'val': valid_metrics, 'test': test_metrics}
+        self.metrics = nn.ModuleDict(metrics) if metrics is not None else None
+
         self.preprocessor = preprocessor
 
     def save_model_args(self, dir_path):
         _save_model(dir_path, self.model, 'model')
 
     def training_step(self, batch, batch_idx):
-        return self.compute_loss(batch, batch_idx, 'train', prog_bar=True)
+        return self.compute_loss(batch, batch_idx, 'train_', prog_bar=True)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
         return self.compute_loss(batch, batch_idx, 'val', dataloader_idx=dataloader_idx, prog_bar=True)
 
     def test_step(self, batch, batch_idx, dataloader_idx=None):
-        return self.compute_loss(batch, batch_idx, 'test', dataloader_idx=dataloader_idx, prog_bar=True)
+        return self.compute_loss(batch, batch_idx, 'test_', dataloader_idx=dataloader_idx, prog_bar=True)
+
+    def _compute_metrics(self, key, metrics):
+        if metrics is None:
+            return
+
+        for name, mdict in metrics.items():
+            if key in name:
+                if mdict is None:
+                    continue
+
+                name = name if not name.endswith('_') else name[:-1]
+                for metric_name, m in mdict.items():
+                    if not hasattr(m, 'log_dict'):
+                        continue
+                    val = {f"{name}/{metric_name}_{mkey}": mval for mkey, mval in m.compute().items()}
+                    self.log_dict(val)
+                    m.reset()
+
+    def on_train_epoch_end(self):
+        self._compute_metrics('train', self.metrics)
+
+    def on_validation_epoch_end(self):
+        self._compute_metrics('val', self.metrics)
+
+    def on_test_epoch_end(self):
+        self._compute_metrics('test', self.metrics)
 
     def get_dataset_name(self, dataset_name, dataloader_idx=None):
         return dataset_name if dataloader_idx is None else f"{dataset_name}_{dataloader_idx}"
@@ -41,8 +84,9 @@ class NetworkVAE(pl.LightningModule):
         loss = self.loss[dataset_name](pred, (ops, adj))
 
         log_name = self.get_dataset_name(dataset_name, dataloader_idx=dataloader_idx)
+        metrics_name = f"{log_name}_" if '_' not in log_name else log_name
         self.log(f'{log_name}/loss', loss, prog_bar=prog_bar)
-        self._eval_metrics(pred, (ops, adj), self.metrics[dataset_name], log_name)
+        self._eval_metrics(pred, (ops, adj), _get(self.metrics, metrics_name), log_name)
 
         return loss
 
@@ -51,12 +95,16 @@ class NetworkVAE(pl.LightningModule):
             return
 
         def eval_log(name, m):
-            res = m(pred, true)
-            if isinstance(res, dict):
-                for k, v in res.items():
-                    self.log(f"{prefix}/{m_name}_{k}", v)
-            else:
-                self.log(f"{prefix}/{name}", res)
+            on_step = _log_stepwise(m)
+            if hasattr(m, 'log_dict'):
+                m.update(pred, true)
+                if on_step:
+                    res = {f"{prefix}/{name}_{k}": v for k, v in m.compute().items()}
+                    self.log_dict(res)
+                return
+
+            m(pred, true)
+            self.log(f"{prefix}/{name}", m, on_step=on_step)
 
         for m_name, metric in metrics.items():
             eval_log(m_name, metric)
@@ -76,7 +124,7 @@ class NetworkVAE(pl.LightningModule):
         model = load_model_from_data(unlabeled_path)
 
         cfg = cfg_func(model, nb, **kwargs)
-        vae_kwargs = ['loss', 'preprocessor', 'train_metrics', 'valid_metrics', 'test_metrics']
+        vae_kwargs = ['loss', 'preprocessor', 'metrics']
         vae_kwargs = {k: cfg[k] for k in vae_kwargs}
 
         return cfg, NetworkVAE.load_from_checkpoint(os.path.join(checkpoint_dir, 'checkpoints', weights_name),
@@ -84,18 +132,14 @@ class NetworkVAE(pl.LightningModule):
 
 
 class InfoNAS(NetworkVAE):
-    def __init__(self, model, labeled_model, loss, labeled_loss, preprocessor, train_metrics=None,
-                 labeled_train_metrics=None, valid_metrics=None, labeled_valid_metrics=None, test_metrics=None,
-                 labeled_test_metrics=None):
+    def __init__(self, model, labeled_model, loss, labeled_loss, preprocessor, metrics=None, labeled_metrics=None):
 
-        super().__init__(model, loss, preprocessor, train_metrics=train_metrics, valid_metrics=valid_metrics,
-                         test_metrics=test_metrics)
+        super().__init__(model, loss, preprocessor, metrics=metrics)
 
         self.labeled_model = labeled_model
         self.labeled_loss = _init_loss(labeled_loss)
-        self.labeled_metrics = {
-            'train': labeled_train_metrics, 'val': labeled_valid_metrics, 'test': labeled_test_metrics
-        }
+
+        self.labeled_metrics = nn.ModuleDict(labeled_metrics) if labeled_metrics is not None else None
 
         self.automatic_optimization = False
 
@@ -142,16 +186,29 @@ class InfoNAS(NetworkVAE):
         labeled_loss = self.labeled_loss[dataset_name](pred_io, outputs)
         loss = unlabeled_loss + labeled_loss
 
-        logname = self.get_dataset_name(dataset_name, dataloader_idx=dataloader_idx)
-        logname = f"{logname}_labeled"
+        dataset_name = self.get_dataset_name(dataset_name, dataloader_idx=dataloader_idx)
+        metrics_name = f"{dataset_name}_" if '_' not in dataset_name else dataset_name
+        logname = f"{dataset_name}_labeled"
         self.log(f'{logname}/loss', loss)
         self.log(f'{logname}/unlabeled_loss', unlabeled_loss, prog_bar=prog_bar)
         self.log(f'{logname}/labeled_loss', labeled_loss, prog_bar=prog_bar)
 
-        self._eval_metrics(pred_vae, (ops, adj), self.metrics[dataset_name], logname)
-        self._eval_metrics(pred_io, outputs, self.labeled_metrics[dataset_name], logname)
+        self._eval_metrics(pred_vae, (ops, adj), _get(self.metrics, metrics_name), logname)
+        self._eval_metrics(pred_io, outputs, _get(self.labeled_metrics, f"labeled_{metrics_name}"), logname)
 
         return loss
+
+    def on_train_epoch_end(self):
+        self._compute_metrics('train', self.metrics)
+        self._compute_metrics('train', self.labeled_metrics)
+
+    def on_validation_epoch_end(self):
+        self._compute_metrics('val', self.metrics)
+        self._compute_metrics('val', self.labeled_metrics)
+
+    def on_test_epoch_end(self):
+        self._compute_metrics('test', self.metrics)
+        self._compute_metrics('test', self.labeled_metrics)
 
     def configure_optimizers(self):
         optimizer = get_adam(self.model.parameters())
@@ -165,9 +222,7 @@ class InfoNAS(NetworkVAE):
         model, labeled_model = load_model_from_data(unlabeled_path), load_model_from_data(labeled_path)
 
         cfg = cfg_func(model, labeled_model=labeled_model, **kwargs)
-        vae_kwargs = ['loss', 'preprocessor', 'labeled_loss', 'train_metrics',
-                      'valid_metrics', 'test_metrics', 'labeled_train_metrics', 'labeled_valid_metrics',
-                      'labeled_test_metrics']
+        vae_kwargs = ['loss', 'preprocessor', 'labeled_loss', 'metrics', 'labeled_metrics']
         vae_kwargs = {k: cfg[k] for k in vae_kwargs if k in cfg}
 
         return cfg, InfoNAS.load_from_checkpoint(os.path.join(checkpoint_dir, 'checkpoints', weights_name),

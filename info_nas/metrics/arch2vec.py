@@ -42,6 +42,9 @@ class ReconstructionMetrics(Metric):
         self.add_state("total", default=torch.tensor(0), dist_reduce_fx="sum")
         self.add_state("total_uneven", default=torch.tensor(0), dist_reduce_fx="sum")
 
+        self.epoch_only = False
+        self.log_dict = True
+
     def _get_metrics(self):
         return {'ops_acc': self.ops_acc, 'adj_recall': self.adj_recall, 'adj_fp': self.adj_fp, 'adj_acc': self.adj_acc}
 
@@ -103,12 +106,18 @@ class ValidityUniqueness(Metric):
         self.n_latent_points = n_latent_points
         self.validity_func = validity_func
 
+        self.epoch_only = True
+        self.log_dict = True
+
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         mu = preds[2]
         self.mu_list.append(mu.detach().cpu())
 
     def compute(self):
         # TODO compute stream avg and var if too much mem
+        if not len(self.mu_list):
+            return {'validity': 0.0, 'uniqueness': 0.0}
+
         z_vec = torch.cat(self.mu_list, dim=0)
         z_mean, z_std = z_vec.mean(0), z_vec.std(0)
 
