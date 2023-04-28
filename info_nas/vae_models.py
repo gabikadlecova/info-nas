@@ -40,13 +40,13 @@ class NetworkVAE(pl.LightningModule):
         _save_model(dir_path, self.model, 'model')
 
     def training_step(self, batch, batch_idx):
-        return self.compute_loss(batch, batch_idx, 'train_', prog_bar=True)
+        return self.compute_loss(batch, batch_idx, 'train', prog_bar=True)
 
     def validation_step(self, batch, batch_idx, dataloader_idx=None):
         return self.compute_loss(batch, batch_idx, 'val', dataloader_idx=dataloader_idx, prog_bar=True)
 
     def test_step(self, batch, batch_idx, dataloader_idx=None):
-        return self.compute_loss(batch, batch_idx, 'test_', dataloader_idx=dataloader_idx, prog_bar=True)
+        return self.compute_loss(batch, batch_idx, 'test', dataloader_idx=dataloader_idx, prog_bar=True)
 
     def _compute_metrics(self, key, metrics):
         if metrics is None:
@@ -110,6 +110,8 @@ class NetworkVAE(pl.LightningModule):
             eval_log(m_name, metric)
 
     def _process_batch(self, batch):
+        batch = batch['unlabeled'] if 'unlabeled' in batch else batch
+
         ops, adj = batch['ops'], batch['adj']
         ops, adj = self.preprocessor.preprocess(ops, adj)
 

@@ -1,19 +1,25 @@
 {
-  "datasets": {
-    "cifar_val": "data/test_io.pt"
+  "unlabeled": {
+    "train": {"hashes": "data/train_hashes_u.csv"},
+    "val": {"hashes": "data/val_hashes_u.csv"}
   },
-  "train" : {
-    "hashes": "data/train_hashes.csv",
-    "dataset": "cifar_val"
-  },
-  "val": [
-    {
-      "hashes": "data/val_hashes.csv",
+  "labeled": {
+    "datasets": {
+      "cifar_val": "data/test_io.pt"
+    },
+    "train": {
+      "hashes": "data/train_hashes.csv",
       "dataset": "cifar_val"
     },
-    {
-      "hashes": "data/val_hashes.csv",
-      "dataset": "cifar_val"
-    }
-  ]
+    "val": [
+      {
+        "hashes": "data/val_hashes.csv",
+        "dataset": "cifar_val"
+      },
+      {
+        "hashes": "data/val_hashes.csv",
+        "dataset": "cifar_val"
+      }
+    ]
+  }
 }

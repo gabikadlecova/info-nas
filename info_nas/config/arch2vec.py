@@ -6,7 +6,7 @@ from info_nas.models.vae.arch2vec import Arch2vecPreprocessor
 from torch.nn import MSELoss
 
 from info_nas.metrics.arch2vec import VAELoss, ReconstructionMetrics, ValidityUniqueness, ValidityNasbench101
-from config.base import get_all_metrics
+from info_nas.config.base import get_all_metrics
 
 
 def arch2vec_nb101_cfg(model, nb, n_train=1, n_val=1, n_test=0, labeled_model=None, labeled_metric_func=None, **kwargs):
@@ -37,6 +37,6 @@ def _get_metrics(prepro, vae, nb):
     })
 
 
-archvec_configs = {
+arch2vec_configs = {
     'nasbench101': arch2vec_nb101_cfg
 }

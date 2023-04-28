@@ -1,12 +1,15 @@
+import os.path
+
 import torch
 
-from info_nas.datasets.base import BaseIOExtractor, IOHook, BaseNetworkData
+from info_nas.datasets.base import BaseIOExtractor, IOHook, BaseNetworkData, _load_data_or_iterable, load_from_cfg, \
+    join_path, NetworkDataset
 from tqdm import tqdm
 
 
 class Nasbench101Data(BaseNetworkData):
     def __init__(self, nb, preprocessor, verbose=True, return_accuracy=False, acc_epoch=108,
-                 acc_key='final_validation_accuracy'):
+                 acc_key='final_validation_accuracy', debug=False):
         self.nb = nb
         self.preprocessor = preprocessor
         self.verbose = verbose
@@ -15,6 +18,7 @@ class Nasbench101Data(BaseNetworkData):
         self.acc_key = acc_key
 
         self.net_data = None
+        self.debug = debug
 
     def load(self):
         if self.net_data is not None:
@@ -38,9 +42,15 @@ class Nasbench101Data(BaseNetworkData):
 
             self.net_data[net_hash] = res
 
+            if self.debug:
+                return self.net_data
+
         return self.net_data
 
     def get_data(self, net_hash):
+        if self.debug:
+            return next(iter(self.net_data.values()))
+
         return self.net_data[net_hash]
 
     def get_hashes(self):
@@ -94,3 +104,11 @@ class Nasbench101Extractor(BaseIOExtractor):
             res['biases'] = out_layer.bias.detach()
 
         return res
+
+
+def load_nb_datasets(data_cfg, network_data, base_dir=None):
+    def _nb_func(data):
+        hashes = join_path(data['hashes'], base_dir=base_dir)
+        return NetworkDataset(hashes, network_data)
+
+    return load_from_cfg(data_cfg, _nb_func)
