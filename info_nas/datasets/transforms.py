@@ -2,8 +2,8 @@ import torch
 from torchvision.transforms import Compose
 
 
-def get_label_transforms():
-    return Compose([IncludeBias(), MultiplyByWeights(), SortByWeights()])
+def get_label_transforms(**kwargs):
+    return Compose([IncludeBias(), MultiplyByWeights(), SortByWeights(**kwargs)])
 
 
 class IncludeBias:
@@ -30,7 +30,7 @@ class MultiplyByWeights:
         weights = _get_weights(item)
 
         output = output.unsqueeze(0) * weights
-        item['outputs'] = weights
+        item['outputs'] = output
 
         return item
 
