@@ -4,7 +4,7 @@ import os.path
 import click
 import pytorch_lightning as pl
 
-from datasets.search_spaces.nasbench101 import load_nb_datasets
+from info_nas.datasets.search_spaces.nasbench101 import load_nb_datasets
 from info_nas.config import INFONAS_CONFIGS
 from info_nas.datasets.base import NetworkDataModule, join_dataset_iterables
 from info_nas.datasets.io_dataset import get_n_dataloaders, load_io_from_config

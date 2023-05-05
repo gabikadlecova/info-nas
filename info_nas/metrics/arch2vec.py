@@ -108,10 +108,14 @@ class ValidityUniqueness(Metric):
 
         self.epoch_only = True
         self.log_dict = True
+        self.dev_mu = None
 
     def update(self, preds: torch.Tensor, target: torch.Tensor):
         mu = preds[2]
         self.mu_list.append(mu.detach().cpu())
+
+        if self.dev_mu is None:
+            self.dev_mu = mu.detach()
 
     def compute(self):
         # TODO compute stream avg and var if too much mem
@@ -129,6 +133,7 @@ class ValidityUniqueness(Metric):
         for _ in range(self.n_latent_points):
             z = torch.randn_like(z_mean)
             z = z * z_std + z_mean
+            z = z.type_as(self.dev_mu)
             ops, adj = self.model.decoder(z.unsqueeze(0))
 
             # convert to search space format
@@ -155,6 +160,8 @@ class ValidityUniqueness(Metric):
 
         validity = validity_counter / self.n_latent_points
         uniqueness = len(buckets) / (validity_counter + 1e-8)
+
+        self.dev_mu = None
         return {'validity': validity, 'uniqueness': uniqueness}
 
 
