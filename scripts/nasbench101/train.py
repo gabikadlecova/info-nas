@@ -58,7 +58,10 @@ def train(base_dir, nb, config, data_config, epochs, grad_clip, ckpt_dir, weight
 
     with open(data_config, 'r') as f:
         data_config = json.load(f)
-    nval = get_n_dataloaders(data_config, 'val')
+    nval = get_n_dataloaders(data_config['unlabeled'], 'val')\
+
+    if not unlabeled or as_labeled:
+        nval += get_n_dataloaders(data_config['labeled'], 'val')
 
     # model
     if ckpt_dir is None:
