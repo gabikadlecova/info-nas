@@ -17,7 +17,7 @@ from searchspace_train.datasets.nasbench101 import load_nasbench
 from info_nas.vae_models import InfoNAS, save_to_trainer_path, NetworkVAE
 
 
-def init_from_scratch(config, nb, n_val, unlabeled=False, debug=False):
+def init_from_scratch(config, nb, n_val, unlabeled=False, debug=False, clip=5):
     vae = Arch2vecModel()
     model = None if unlabeled else ConcatConvModel(3, 513, start_channels=32)
 
@@ -28,13 +28,14 @@ def init_from_scratch(config, nb, n_val, unlabeled=False, debug=False):
         return config, NetworkVAE(vae, config['loss'], config['preprocessor'], metrics=config['metrics'])
 
     return config, InfoNAS(vae, model, config['loss'], config['labeled_loss'], config['preprocessor'],
-                           metrics=config['metrics'])
+                           metrics=config['metrics'], clip=clip)
 
 
-def init_from_checkpoint(config, nb, n_val, ckpt_dir, weights_name, unlabeled=False, debug=False):
+def init_from_checkpoint(config, nb, n_val, ckpt_dir, weights_name, unlabeled=False, debug=False, clip=5):
     config_func = INFONAS_CONFIGS[config]
     cls = NetworkVAE if unlabeled else InfoNAS
-    return cls.load_from_checkpoint_dir(ckpt_dir, weights_name, config_func, n_val=n_val, nb=nb, debug=debug)
+    clip = {} if unlabeled else {'clip': clip}
+    return cls.load_from_checkpoint_dir(ckpt_dir, weights_name, config_func, n_val=n_val, nb=nb, debug=debug, **clip)
 
 
 @click.command()
@@ -43,12 +44,13 @@ def init_from_checkpoint(config, nb, n_val, ckpt_dir, weights_name, unlabeled=Fa
 @click.option('--config', default='arch2vec_nasbench101')
 @click.option('--data_config', required=True)
 @click.option('--epochs', default=5)
+@click.option('--grad_clip', default=5)
 @click.option('--ckpt_dir', default=None)
 @click.option('--weights_name', default=None)
 @click.option('--debug/--no_debug', default=False)
 @click.option('--unlabeled/--labeled', default=False, help="Labeled or unlabeled model.")
 @click.option('--as_labeled/--as_unlabeled', default=False, help="If unlabeled model, determine the data mode.")
-def train(base_dir, nb, config, data_config, epochs, ckpt_dir, weights_name, debug, unlabeled, as_labeled):
+def train(base_dir, nb, config, data_config, epochs, grad_clip, ckpt_dir, weights_name, debug, unlabeled, as_labeled):
     print("Loading nasbench...")
     nb = os.path.join(base_dir, nb)
     nb = load_nasbench(nb)  # TODO more general load (e.g. move to cfg)
@@ -60,9 +62,10 @@ def train(base_dir, nb, config, data_config, epochs, ckpt_dir, weights_name, deb
 
     # model
     if ckpt_dir is None:
-        config, model = init_from_scratch(config, nb, nval, unlabeled=unlabeled, debug=debug)
+        config, model = init_from_scratch(config, nb, nval, unlabeled=unlabeled, debug=debug, clip=grad_clip)
     else:
-        config, model = init_from_checkpoint(config, nb, nval, ckpt_dir, weights_name, unlabeled=unlabeled, debug=debug)
+        config, model = init_from_checkpoint(config, nb, nval, ckpt_dir, weights_name, unlabeled=unlabeled, debug=debug,
+                                             clip=grad_clip)
 
     # datasets
     network_data = config['network_data']
@@ -81,7 +84,7 @@ def train(base_dir, nb, config, data_config, epochs, ckpt_dir, weights_name, deb
     if debug:
         debug_args = {'log_every_n_steps': 1, 'limit_train_batches': 2, 'limit_val_batches': 2}
 
-    pl_trainer = pl.Trainer(max_epochs=epochs, **debug_args)
+    pl_trainer = pl.Trainer(max_epochs=epochs, gradient_clip_val=grad_clip, **debug_args)
     save_to_trainer_path(pl_trainer, model)
 
     ckpt_path = None if ckpt_dir is None else os.path.join(ckpt_dir, 'checkpoints', weights_name)

@@ -83,6 +83,9 @@ class NetworkDataModule(pl.LightningDataModule):
 
     def train_dataloader(self):
         loaders = self._get_loaders('train')
+        if len(loaders) == 1:
+            return next(iter(loaders))
+
         return CombinedLoader(loaders, mode='max_size_cycle')
 
     def val_dataloader(self):
@@ -97,7 +100,7 @@ class NetworkDataModule(pl.LightningDataModule):
 
         shuffle = True if key == 'train' else False
         loaders = apply_to_vals(self.data[key], lambda d: DataLoader(d, batch_size=self.batch_size, shuffle=shuffle))
-        return loaders if len(loaders) > 1 else loaders[0]
+        return loaders
 
 
 class NetworkDataset(torch.utils.data.Dataset):
@@ -134,6 +137,7 @@ def _load_data_or_iterable(data, init_func):
 
 def _not_dict_and_list(data):
     return not isinstance(data, dict) and not isinstance(data, list)
+
 
 def _to_dict_or_list(data, type):
     assert type == dict or type == list

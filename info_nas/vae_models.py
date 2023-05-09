@@ -1,5 +1,5 @@
 import os.path
-from copy import copy
+from copy import copy, deepcopy
 
 import pytorch_lightning as pl
 import torch
@@ -134,8 +134,8 @@ class NetworkVAE(pl.LightningModule):
 
 
 class InfoNAS(NetworkVAE):
-    def __init__(self, model, labeled_model, loss, labeled_loss, preprocessor, metrics=None, labeled_metrics=None):
-
+    def __init__(self, model, labeled_model, loss, labeled_loss, preprocessor, metrics=None, labeled_metrics=None,
+                 clip=5):
         super().__init__(model, loss, preprocessor, metrics=metrics)
 
         self.labeled_model = labeled_model
@@ -144,6 +144,7 @@ class InfoNAS(NetworkVAE):
         self.labeled_metrics = nn.ModuleDict(labeled_metrics) if labeled_metrics is not None else None
 
         self.automatic_optimization = False
+        self.clip = clip
 
     def training_step(self, batch, batch_idx):
         batch, labeled_batch = batch['unlabeled'], batch['labeled']
@@ -154,12 +155,14 @@ class InfoNAS(NetworkVAE):
         loss = self.compute_loss(batch, batch_idx, 'train', prog_bar=True)
         self.log(f'train/unlabeled_loss', loss)
         self.manual_backward(loss)
+        self.clip_gradients(opt, self.clip)
         opt.step()
 
         # labeled step
         labeled_opt.zero_grad()
         loss = self.compute_loss(labeled_batch, batch_idx, 'train', prog_bar=True)
         self.manual_backward(loss)
+        self.clip_gradients(labeled_opt, self.clip)
         labeled_opt.step()
 
     def save_model_args(self, dir_path):
@@ -233,7 +236,7 @@ class InfoNAS(NetworkVAE):
 
 
 def _init_loss(loss):
-    return {'train': loss, 'val': copy(loss), 'test': copy(loss)}
+    return {'train': loss, 'val': deepcopy(loss), 'test': deepcopy(loss)}
 
 
 def _save_model(dir_path, model, model_name):

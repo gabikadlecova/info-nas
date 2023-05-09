@@ -7,16 +7,18 @@ from torchmetrics import Metric
 
 
 class VAELoss(nn.Module):
-    def __init__(self, adj_loss=None, ops_loss=None, w_ops=1.0, w_adj=1.0):
+    def __init__(self, preprocessor, adj_loss=None, ops_loss=None, w_ops=1.0, w_adj=1.0):
         super().__init__()
         self.adj_loss = nn.BCELoss() if adj_loss is None else adj_loss
         self.ops_loss = nn.BCELoss() if ops_loss is None else ops_loss
         self.w_ops = w_ops
         self.w_adj = w_adj
 
+        self.preprocessor = preprocessor
+
     def __call__(self, y_pred, y_true):
-        ops, adj = y_true
-        ops_recon, adj_recon, mu, logvar = y_pred
+        _, _, mu, logvar = y_pred
+        ops, adj, ops_recon, adj_recon = _get_adj_ops(y_pred, y_true, self.preprocessor)
 
         loss_ops = self.ops_loss(ops_recon, ops)
         loss_adj = self.adj_loss(adj_recon, adj)

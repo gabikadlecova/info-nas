@@ -11,15 +11,16 @@ from info_nas.config.base import get_all_metrics
 
 def arch2vec_nb101_cfg(model, nb, n_train=1, n_val=1, n_test=0, labeled_model=None, labeled_metric_func=None, **kwargs):
     # loss and metrics
-    loss = VAELoss()
-    labeled_loss = MSELoss()
-
     prepro = Arch2vecPreprocessor()
+
+    loss = VAELoss(prepro)
     metrics = get_all_metrics(lambda: _get_metrics(prepro, model, nb), n_train=n_train, n_val=n_val, n_test=n_test)
 
-    cfg = {'loss': loss, 'labeled_loss': labeled_loss, 'preprocessor': prepro,
+    cfg = {'loss': loss, 'preprocessor': prepro,
            'metrics': metrics}
     if labeled_model is not None:
+        cfg['labeled_loss'] = MSELoss()
+
         if labeled_metric_func is not None:
             cfg['labeled_metrics'] = get_all_metrics(labeled_metric_func, n_train=n_train, n_val=n_val, n_test=n_test)
         else:
